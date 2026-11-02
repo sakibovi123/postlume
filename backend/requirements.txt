@@ -1,0 +1,9 @@
+Django==6.1.2
+djangorestframework==3.18.3
+cryptography==50.0.2
+httpx==0.28.1
+pydantic==2.14.2
+pillow==13.0.0
+imageio-ffmpeg==0.8.0
+fal-client==1.0.3
+python-dotenv==1.2.4
