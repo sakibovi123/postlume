@@ -4,6 +4,10 @@ const API = process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  experimental: {
+    // Story generation can take longer than the 30s default when proxied to Django.
+    proxyTimeout: 300_000,
+  },
   partialPrefetching: true,
   turbopack: {
     rules: {

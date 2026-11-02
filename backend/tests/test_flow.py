@@ -144,3 +144,32 @@ class FlowTests(TestCase):
         r = self.c.get("/api/v1/social/youtube/connect")
         self.assertEqual(r.status_code, 302)
         self.assertIn("not+configured", r["Location"])
+
+
+@override_settings(MEDIA_ROOT=TMP_MEDIA)
+class MediaAndHealthTests(TestCase):
+    def test_health(self):
+        self.assertEqual(APIClient().get("/api/v1/health").json(), {"ok": True})
+
+    def test_media_is_private_and_supports_ranges(self):
+        c = APIClient()
+        c.post("/api/v1/auth/register", {"email": "m@example.com", "password": "s3cret-pass!"}, format="json")
+        p = c.post("/api/v1/projects", {}, format="json").json()
+        r = c.post(f"/api/v1/projects/{p['id']}/messages", {"text": "15 second story about a fox"}, format="json")
+        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": r.json()["assistantMessage"]["brief"]}, format="json")
+        story = c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json").json()
+        vid = c.post(f"/api/v1/stories/{story['id']}/videos", {"tier": "lite"}, format="json").json()["id"]
+        jobs.drain()
+        url = c.get(f"/api/v1/videos/{vid}").json()["outputUrl"]
+        full = c.get(url)
+        self.assertEqual(full.status_code, 200)
+        size = int(full["Content-Length"])
+        part = c.get(url, HTTP_RANGE="bytes=0-99")
+        self.assertEqual(part.status_code, 206)
+        self.assertEqual(part["Content-Range"], f"bytes 0-99/{size}")
+        self.assertEqual(len(b"".join(part.streaming_content)), 100)
+        self.assertEqual(APIClient().get(url).status_code, 404)
+        stranger = APIClient()
+        stranger.post("/api/v1/auth/register", {"email": "s@example.com", "password": "s3cret-pass!"}, format="json")
+        self.assertEqual(stranger.get(url).status_code, 404)
+        self.assertEqual(c.get("/media/../config/settings.py").status_code, 404)

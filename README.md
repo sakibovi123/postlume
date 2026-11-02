@@ -24,6 +24,11 @@ Open http://localhost:3000, sign up, and make a video. By default every provider
 pipeline (chat → brief → story → scenes → keyframes → voice → captions → MP4) runs offline for $0 with
 placeholder images and silent narration.
 
+## Deploying
+
+See [DEPLOY.md](DEPLOY.md) for Railway: two services (frontend + backend) built from their Dockerfiles,
+with a volume for SQLite and videos.
+
 ## Switching to real AI providers
 
 Edit `backend/.env`:
@@ -72,6 +77,5 @@ retry, idempotent charging, plan gates, moderation, org isolation and roles, and
 - Streaming chat responses (replies arrive whole).
 - "Continue with Google" login.
 - Email delivery for invites (copy the link from the Team page).
-- Signed or private media URLs: `/media` is served publicly by Django in dev.
 - Publishing and scheduling (Phase 2) and Autopilot (Phase 3).
-- Production deployment config (Postgres, gunicorn, object storage).
+- Object storage (S3/R2) for media. Videos live on the backend volume for now.

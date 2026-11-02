@@ -17,7 +17,12 @@ def env_bool(name, default=False):
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", True)
-ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# Writable data (SQLite + rendered media). On Railway this is a volume mounted at /data.
+DATA_DIR = Path(env("DATA_DIR", str(BASE_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# The frontend proxies to the backend over Railway's private network (*.railway.internal).
+ALLOWED_HOSTS = [h for h in env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,.railway.internal,.up.railway.app,healthcheck.railway.app").split(",") if h]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -35,6 +40,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -62,13 +68,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-        "OPTIONS": {"timeout": 20, "init_command": "PRAGMA journal_mode=WAL;"},
+if env("DATABASE_URL"):
+    import dj_database_url
+
+    DATABASES = {"default": dj_database_url.parse(env("DATABASE_URL"), conn_max_age=60, conn_health_checks=True)}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": DATA_DIR / "db.sqlite3",
+            "OPTIONS": {"timeout": 20, "init_command": "PRAGMA journal_mode=WAL;"},
+        }
     }
-}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
@@ -81,19 +92,34 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(env("MEDIA_ROOT", str(DATA_DIR / "media")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # The Next.js dev server proxies /api/* and /media/* here, so the browser sees one origin.
-PUBLIC_APP_URL = env("PUBLIC_APP_URL", "http://localhost:3000")
+PUBLIC_APP_URL = env("PUBLIC_APP_URL", "http://localhost:3000").strip().rstrip("/")
+if PUBLIC_APP_URL and not PUBLIC_APP_URL.startswith("http"):
+    PUBLIC_APP_URL = f"https://{PUBLIC_APP_URL}"
 CSRF_TRUSTED_ORIGINS = [o for o in env("CSRF_TRUSTED_ORIGINS", PUBLIC_APP_URL).split(",") if o]
+if env("RAILWAY_PUBLIC_DOMAIN"):
+    CSRF_TRUSTED_ORIGINS.append(f"https://{env('RAILWAY_PUBLIC_DOMAIN')}")
+if not env("PUBLIC_APP_URL") and not DEBUG:
+    # Fallback until PUBLIC_APP_URL is set; the CSRF token and SameSite cookies still apply.
+    CSRF_TRUSTED_ORIGINS.append("https://*.up.railway.app")
 if DEBUG:
     CSRF_TRUSTED_ORIGINS += [f"http://{h}:{p}" for h in ("localhost", "127.0.0.1") for p in range(3000, 3006)]
 SESSION_COOKIE_NAME = "tl_session"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14
+if not DEBUG and PUBLIC_APP_URL.startswith("https://"):
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
@@ -102,11 +128,12 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "apps.accounts.exceptions.api_exception_handler",
 }
 
+# Optional: when empty, a key is derived from DJANGO_SECRET_KEY (so rotating that key invalidates stored tokens).
 TOKEN_ENCRYPTION_KEY = env("TOKEN_ENCRYPTION_KEY", "")
-if not DEBUG and (not TOKEN_ENCRYPTION_KEY or SECRET_KEY.startswith("dev-")):
+if not DEBUG and SECRET_KEY.startswith("dev-"):
     from django.core.exceptions import ImproperlyConfigured
 
-    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY and TOKEN_ENCRYPTION_KEY when DJANGO_DEBUG is off.")
+    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY to a long random value when DJANGO_DEBUG is off.")
 
 # Providers: "fake" runs the whole pipeline offline for $0.
 LLM_PROVIDER = env("LLM_PROVIDER", "fake")  # fake | openrouter

@@ -1,0 +1,11 @@
+.venv/
+.env
+.env.*
+!.env.example
+db.sqlite3*
+media/
+staticfiles/
+__pycache__/
+*.pyc
+assets/music/*
+!assets/music/README.md
