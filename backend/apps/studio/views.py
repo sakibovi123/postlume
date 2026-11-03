@@ -18,9 +18,9 @@ from pipeline import jobs
 from providers.base import ProviderError
 from providers.media import local_path
 
-from . import ai
+from . import ai, tasks
 from .dto import brief_dto, message_dto, project_dto, scene_dto, story_dto, video_dto
-from .models import Brief, ChatMessage, Project, Scene, Story, Video, VideoStatus
+from .models import Brief, ChatMessage, GenerationTask, Project, Scene, Story, Video, VideoStatus
 from .schemas import CreativeBrief
 from .styles import GENRES, MUSIC_MOODS, STYLE_PRESETS, VOICES
 
@@ -143,13 +143,22 @@ class MessagesView(APIView):
         if request.data.get("stylePreset") in STYLE_PRESETS:
             p.style_preset = request.data["stylePreset"]
         user_msg = ChatMessage.objects.create(project=p, role="user", content={"text": text})
-        reply, _cost = _llm(ai.director_reply, p, list(p.messages.all()), p.style_preset)
-        brief = reply.brief.model_dump() if reply.brief else None
-        bot_msg = ChatMessage.objects.create(project=p, role="assistant", content={"text": reply.reply, "brief": brief})
         if p.title == "Untitled project":
             p.title = text[:60]
         p.save()
-        return Response({"userMessage": message_dto(user_msg), "assistantMessage": message_dto(bot_msg)})
+        history, preset = list(p.messages.all()), p.style_preset
+
+        def work(rep):
+            rep.stage("reading", 8)
+            reply, _cost = _llm(ai.director_reply, p, history, preset, on_text=rep.stream)
+            rep.stage("saving", 95)
+            brief = reply.brief.model_dump() if reply.brief else None
+            bot_msg = ChatMessage.objects.create(project=p, role="assistant", content={"text": reply.reply, "brief": brief})
+            Project.objects.filter(pk=p.pk).update(updated_at=bot_msg.created_at)
+            return {"userMessage": message_dto(user_msg), "assistantMessage": message_dto(bot_msg)}
+
+        task = tasks.start(p, "director", work)
+        return Response({"task": tasks.task_dto(task), "userMessage": message_dto(user_msg)}, status=202)
 
 
 class BriefView(APIView):
@@ -182,17 +191,25 @@ class StoriesView(APIView):
             raise ValidationError({"briefId": "Confirm a creative brief first."})
         key = request.data.get("idempotencyKey") or f"story:{p.id}:{brief.id}:{int(time.time() * 1000)}"
         entry = billing.charge(m.organization, Action.STORY_GENERATE, billing.STORY_CREDITS, key, note="Story")
-        try:
-            out, cost = _llm(ai.write_story, brief.raw)
-            ai.moderate(f"{out.title} {out.script}")
-        except Exception:
-            billing.refund(entry, "Refund: story generation failed")
-            raise
-        story = _save_story(p, brief, out, "generated")
-        entry.story_id = story.id
-        entry.save(update_fields=["story_id"])
-        billing.add_cost(key, cost)
-        return Response(story_dto(story), status=201)
+
+        def work(rep):
+            rep.stage("brief", 5)
+            try:
+                out, cost = _llm(ai.write_story, brief.raw, on_text=rep.stream)
+                rep.stage("checking", 94)
+                ai.moderate(f"{out.title} {out.script}")
+            except Exception:
+                billing.refund(entry, "Refund: story generation failed")
+                raise
+            rep.stage("saving", 97)
+            story = _save_story(p, brief, out, "generated")
+            entry.story_id = story.id
+            entry.save(update_fields=["story_id"])
+            billing.add_cost(key, cost)
+            return story_dto(story)
+
+        task = tasks.start(p, "story", work, tasks.target_words(brief.raw))
+        return Response(tasks.task_dto(task), status=202)
 
 
 class StoryDetailView(APIView):
@@ -227,15 +244,34 @@ class StoryRewriteView(APIView):
         ai.moderate(instruction)
         key = request.data.get("idempotencyKey") or f"rewrite:{s.id}:{int(time.time() * 1000)}"
         entry = billing.charge(m.organization, Action.STORY_GENERATE, billing.STORY_CREDITS, key, note="Story rewrite")
-        try:
-            out, cost = _llm(ai.write_story, s.brief.raw, previous=story_dto(s), instruction=instruction)
-            ai.moderate(f"{out.title} {out.script}")
-        except Exception:
-            billing.refund(entry, "Refund: rewrite failed")
-            raise
-        story = _save_story(s.project, s.brief, out, "rewrite")
-        billing.add_cost(key, cost)
-        return Response(story_dto(story), status=201)
+        previous = story_dto(s)
+
+        def work(rep):
+            rep.stage("brief", 5)
+            try:
+                out, cost = _llm(ai.write_story, s.brief.raw, previous=previous, instruction=instruction,
+                                 on_text=rep.stream)
+                rep.stage("checking", 94)
+                ai.moderate(f"{out.title} {out.script}")
+            except Exception:
+                billing.refund(entry, "Refund: rewrite failed")
+                raise
+            rep.stage("saving", 97)
+            story = _save_story(s.project, s.brief, out, "rewrite")
+            billing.add_cost(key, cost)
+            return story_dto(story)
+
+        task = tasks.start(s.project, "rewrite", work, tasks.target_words(s.brief.raw))
+        return Response(tasks.task_dto(task), status=202)
+
+
+class TaskView(APIView):
+    def get(self, request, pk):
+        m = require_role(request, Role.VIEWER)
+        t = GenerationTask.objects.filter(project__organization=m.organization, pk=pk).first()
+        if not t:
+            raise NotFound("Task not found.")
+        return Response(tasks.task_dto(t))
 
 
 class StoryRestoreView(APIView):

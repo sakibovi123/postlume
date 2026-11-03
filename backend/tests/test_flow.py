@@ -14,7 +14,7 @@ from pipeline import jobs
 TMP_MEDIA = tempfile.mkdtemp(prefix="taleloop-test-")
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA)
+@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
 class FlowTests(TestCase):
     @classmethod
     def tearDownClass(cls):
@@ -34,14 +34,19 @@ class FlowTests(TestCase):
         p = self.c.post("/api/v1/projects", {"stylePreset": "cartoon"}, format="json").json()
         r = self.c.post(f"/api/v1/projects/{p['id']}/messages",
                         {"text": f"A {seconds} second kids story about a brave snail"}, format="json")
-        self.assertEqual(r.status_code, 200, r.content)
-        brief = r.json()["assistantMessage"]["brief"]
+        self.assertEqual(r.status_code, 202, r.content)
+        task = r.json()["task"]
+        self.assertEqual(task["status"], "done", task)
+        brief = task["result"]["assistantMessage"]["brief"]
         self.assertEqual(brief["stylePreset"], "cartoon")
         r = self.c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": brief}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         r = self.c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json")
-        self.assertEqual(r.status_code, 201, r.content)
-        return p, r.json()
+        self.assertEqual(r.status_code, 202, r.content)
+        task = r.json()
+        self.assertEqual(task["status"], "done", task)
+        self.assertEqual(self.c.get(f"/api/v1/tasks/{task['id']}").json()["progress"], 100)
+        return p, task["result"]
 
     def test_me_and_billing(self):
         me = self.c.get("/api/v1/auth/me").json()
@@ -146,7 +151,7 @@ class FlowTests(TestCase):
         self.assertIn("not+configured", r["Location"])
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA)
+@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
 class MediaAndHealthTests(TestCase):
     def test_health(self):
         self.assertEqual(APIClient().get("/api/v1/health").json(), {"ok": True})
@@ -156,8 +161,9 @@ class MediaAndHealthTests(TestCase):
         c.post("/api/v1/auth/register", {"email": "m@example.com", "password": "s3cret-pass!"}, format="json")
         p = c.post("/api/v1/projects", {}, format="json").json()
         r = c.post(f"/api/v1/projects/{p['id']}/messages", {"text": "15 second story about a fox"}, format="json")
-        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": r.json()["assistantMessage"]["brief"]}, format="json")
-        story = c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json").json()
+        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": r.json()["task"]["result"]["assistantMessage"]["brief"]},
+               format="json")
+        story = c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json").json()["result"]
         vid = c.post(f"/api/v1/stories/{story['id']}/videos", {"tier": "lite"}, format="json").json()["id"]
         jobs.drain()
         url = c.get(f"/api/v1/videos/{vid}").json()["outputUrl"]
@@ -173,3 +179,45 @@ class MediaAndHealthTests(TestCase):
         stranger.post("/api/v1/auth/register", {"email": "s@example.com", "password": "s3cret-pass!"}, format="json")
         self.assertEqual(stranger.get(url).status_code, 404)
         self.assertEqual(c.get("/media/../config/settings.py").status_code, 404)
+
+
+class PartialJsonTests(TestCase):
+    def test_parses_streamed_prefixes(self):
+        from apps.studio.partial_json import parse_partial
+
+        full = '{"title": "The \\"Fox\\"", "characters": [{"name": "Ash", "role": "hero"}], "script": "Once upon", "n": 12, "ok": true}'
+        self.assertEqual(parse_partial(full)["ok"], True)
+        seen = [parse_partial(full[:i]) for i in range(len(full) + 1)]
+        self.assertIsNone(seen[0])
+        self.assertTrue(all(v is None or isinstance(v, dict) for v in seen))
+        self.assertEqual(parse_partial('{"title": "Hi", "scr'), {"title": "Hi"})
+        self.assertEqual(parse_partial('{"title": "Hi", "script": "Once up'), {"title": "Hi", "script": "Once up"})
+        self.assertEqual(parse_partial('{"a": [{"name": "As'), {"a": [{"name": "As"}]})
+
+
+@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
+class TaskProgressTests(TestCase):
+    def test_story_task_reports_streamed_stages(self):
+        c = APIClient()
+        c.post("/api/v1/auth/register", {"email": "t@example.com", "password": "s3cret-pass!"}, format="json")
+        p = c.post("/api/v1/projects", {}, format="json").json()
+        r = c.post(f"/api/v1/projects/{p['id']}/messages", {"text": "30 second story about an owl"}, format="json")
+        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": r.json()["task"]["result"]["assistantMessage"]["brief"]},
+               format="json")
+        from apps.studio import tasks as task_mod
+
+        stages = []
+        real = task_mod.Reporter._save
+
+        def spy(self, force=False):
+            stages.append(self.task.stage)
+            return real(self, force=True)
+
+        with mock.patch.object(task_mod.Reporter, "_save", spy):
+            task = c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json").json()
+        self.assertEqual(task["status"], "done")
+        for stage in ["brief", "title", "hook", "characters", "script", "checking", "saving"]:
+            self.assertIn(stage, stages)
+        self.assertEqual(task["partial"]["title"], task["result"]["title"])
+        self.assertEqual([s["id"] for s in task["stages"]][:2], ["brief", "title"])
+        self.assertEqual(c.get(f"/api/v1/projects/{p['id']}").json()["tasks"], [])

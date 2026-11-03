@@ -37,7 +37,7 @@ export default function AcceptInvite() {
         <ErrorText error={error} />
         <p className="text-sm text-mute">
           Log in with the email address the invitation was sent to.{" "}
-          <Link className="text-coral" href="/login">
+          <Link className="text-accent" href="/login">
             Log in
           </Link>
         </p>

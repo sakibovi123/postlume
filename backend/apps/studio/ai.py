@@ -60,21 +60,22 @@ Rules:
 Respond only with JSON matching the schema."""
 
 
-def director_reply(project, history, style_preset=""):
+def director_reply(project, history, style_preset="", on_text=None):
     messages = [{"role": m.role, "content": m.content.get("text", "")} for m in history]
     system = DIRECTOR_SYSTEM
     if style_preset:
         system += f"\nThe user picked the '{style_preset}' preset in the style picker; use it unless they say otherwise."
-    return providers.llm().structured("chat", system, messages, DirectorReply, hint={"stylePreset": style_preset})
+    return providers.llm().structured("chat", system, messages, DirectorReply, hint={"stylePreset": style_preset},
+                                      on_text=on_text)
 
 
-def write_story(brief_raw, previous=None, instruction=""):
+def write_story(brief_raw, previous=None, instruction="", on_text=None):
     content = f"Creative brief:\n{json.dumps(brief_raw, indent=2)}"
     if previous:
         content += f"\n\nCurrent story:\n{json.dumps(previous, indent=2)}\n\nRevise it: {instruction}"
     hint = {"brief": brief_raw, "story": previous, "instruction": instruction}
     return providers.llm().structured("story", STORY_SYSTEM, [{"role": "user", "content": content}], StoryOut,
-                                      hint=hint)
+                                      hint=hint, on_text=on_text)
 
 
 def plan_scenes(story_raw, guide, target_seconds):

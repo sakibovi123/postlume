@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from apps.accounts.models import Organization
@@ -135,3 +136,19 @@ class RenderJob(models.Model):
 
     class Meta:
         ordering = ["created_at", "id"]
+
+
+class GenerationTask(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="tasks")
+    kind = models.CharField(max_length=16)  # director | story | rewrite
+    status = models.CharField(max_length=16, default="queued")  # queued | running | done | failed
+    stage = models.CharField(max_length=32, blank=True)
+    progress = models.IntegerField(default=0)
+    partial = models.JSONField(default=dict, encoder=DjangoJSONEncoder)
+    result = models.JSONField(null=True, blank=True, encoder=DjangoJSONEncoder)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]

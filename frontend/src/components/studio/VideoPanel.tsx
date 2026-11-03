@@ -1,12 +1,12 @@
 "use client";
 
-import { Copy, Download, ImageIcon, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Copy, Download, ImageIcon, PartyPopper, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/session";
 import { Badge, Button, Card, cx, ErrorText, Label, Select, Spinner, Textarea } from "@/components/ui";
-import { aspectClass, isActive, ProgressSteps, StatusBadge } from "@/components/video-bits";
+import { aspectClass, isActive, RenderPipeline, StatusBadge } from "@/components/video-bits";
 import { api, videoCredits } from "@/lib/api";
 import type { Billing, Scene, StylesInfo, Video } from "@/lib/types";
 
@@ -80,21 +80,28 @@ export function VideoPanel({
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="space-y-4">
+    <div className="space-y-5">
+      {video.status !== "ready" && <RenderPipeline video={video} />}
+
+      <Card className={cx("space-y-5", video.status === "ready" && "animate-scale-in")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium">{video.title}</h2>
-            <p className="text-xs text-mute">
+            {video.status === "ready" && (
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+                <PartyPopper className="size-3.5" /> Your video is ready
+              </p>
+            )}
+            <h2 className="text-xl font-semibold tracking-tight">{video.title}</h2>
+            <p className="text-xs capitalize text-mute">
               Story v{video.storyVersion} · {video.tier} · {video.aspectRatio}
+              {video.durationMs > 0 && ` · ${Math.round(video.durationMs / 1000)}s`}
               {video.costUsd > 0 && ` · provider cost $${video.costUsd.toFixed(2)}`}
             </p>
           </div>
           <StatusBadge status={video.status} />
         </div>
-        {video.status !== "ready" && <ProgressSteps video={video} />}
         {video.status === "failed" && (
-          <div className="space-y-2 rounded-lg border border-bad/30 bg-bad/10 p-3 text-sm">
+          <div className="space-y-3 rounded-2xl border border-bad/30 bg-bad/10 p-4 text-sm">
             <p className="text-bad">The render failed and your credits were refunded.</p>
             <p className="font-mono text-xs break-all text-mute">{video.error}</p>
             {can("creator") && (
@@ -105,22 +112,25 @@ export function VideoPanel({
           </div>
         )}
         {video.outputUrl && (
-          <div className={cx("mx-auto overflow-hidden rounded-lg bg-black", video.aspectRatio === "9:16" ? "max-w-xs" : "max-w-2xl")}>
-            <video
-              key={video.outputUrl}
-              src={video.outputUrl}
-              poster={video.thumbnailUrl || undefined}
-              controls
-              playsInline
-              className={cx("w-full", aspectClass(video.aspectRatio))}
-            />
+          <div className={cx("relative mx-auto", video.aspectRatio === "9:16" ? "max-w-sm" : "max-w-3xl")}>
+            <div className="absolute -inset-6 rounded-[40px] bg-linear-to-br from-accent/25 via-transparent to-hot/20 blur-2xl" />
+            <div className="glow relative overflow-hidden rounded-3xl bg-black">
+              <video
+                key={video.outputUrl}
+                src={video.outputUrl}
+                poster={video.thumbnailUrl || undefined}
+                controls
+                playsInline
+                className={cx("w-full", aspectClass(video.aspectRatio))}
+              />
+            </div>
           </div>
         )}
         <ErrorText error={error} />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap justify-center gap-2">
           {video.status === "ready" && (
             <a href={api.downloadUrl(video.id)}>
-              <Button variant="primary">
+              <Button variant="primary" className="px-6">
                 <Download className="size-4" /> Download MP4
               </Button>
             </a>
@@ -157,7 +167,7 @@ export function VideoPanel({
 
       {can("creator") && video.scenes && video.scenes.length > 0 && (
         <Card className="space-y-3">
-          <h3 className="text-sm font-medium">Voice, music & captions</h3>
+          <h3 className="text-sm font-semibold">Voice, music & captions</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
               <Label>Voice</Label>
@@ -205,8 +215,8 @@ export function VideoPanel({
 
       {video.scenes && video.scenes.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-medium">
-            Scenes <span className="text-mute">({video.scenes.length})</span>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-mute">
+            Scenes <span className="text-mute/60">({video.scenes.length})</span>
           </h3>
           {video.scenes.map((s) => (
             <SceneRow
@@ -265,9 +275,9 @@ function SceneRow({
   }
 
   return (
-    <Card className="p-3">
+    <Card className="p-3 md:p-3">
       <div className="flex gap-3">
-        <div className={cx("w-20 shrink-0 overflow-hidden rounded-md bg-panel-2", aspectClass(video.aspectRatio))}>
+        <div className={cx("w-20 shrink-0 overflow-hidden rounded-xl bg-white/[0.04]", aspectClass(video.aspectRatio))}>
           {scene.keyframeUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={scene.keyframeUrl} alt="" className="size-full object-cover" />
@@ -286,14 +296,14 @@ function SceneRow({
           </div>
           <p className="text-sm">{scene.narration}</p>
           {can("creator") && (
-            <button onClick={() => setOpen(!open)} className="text-xs text-coral hover:underline" disabled={disabled}>
+            <button onClick={() => setOpen(!open)} className="text-xs font-medium text-accent hover:underline disabled:opacity-40" disabled={disabled}>
               {open ? "Close" : "Edit scene"}
             </button>
           )}
         </div>
       </div>
       {open && (
-        <div className="mt-3 space-y-3 border-t border-line pt-3">
+        <div className="mt-3 animate-fade-in space-y-3 border-t border-white/[0.06] pt-3">
           <label className="block">
             <Label hint="re-assembles only">Caption text</Label>
             <Textarea rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} />

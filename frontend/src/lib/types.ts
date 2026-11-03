@@ -134,11 +134,26 @@ export interface ProjectSummary {
   latestVideo: { id: number; status: VideoStatus; thumbnailUrl: string } | null;
 }
 
+export interface GenTask {
+  id: number;
+  projectId: number;
+  kind: "director" | "story" | "rewrite";
+  status: "queued" | "running" | "done" | "failed";
+  stage: string;
+  progress: number;
+  stages: { id: string; label: string }[];
+  partial: Record<string, unknown>;
+  result: unknown;
+  error: string;
+  createdAt: string;
+}
+
 export interface ProjectDetail extends ProjectSummary {
   messages: ChatMessage[];
   briefs: Brief[];
   stories: Story[];
   videos: Video[];
+  tasks: GenTask[];
 }
 
 export interface StylesInfo {

@@ -118,7 +118,7 @@ export default function TeamPage() {
                   <Badge>{i.role}</Badge>
                   {i.token && (
                     <button
-                      className="flex items-center gap-1 text-xs text-coral"
+                      className="flex items-center gap-1 text-xs text-accent"
                       onClick={() => navigator.clipboard.writeText(inviteLink(i.token!))}
                     >
                       <Copy className="size-3.5" /> Copy link

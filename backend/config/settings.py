@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -102,7 +103,7 @@ MEDIA_ROOT = Path(env("MEDIA_ROOT", str(DATA_DIR / "media")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # The Next.js dev server proxies /api/* and /media/* here, so the browser sees one origin.
-PUBLIC_APP_URL = env("PUBLIC_APP_URL", "http://localhost:3000").strip().rstrip("/")
+PUBLIC_APP_URL = env("PUBLIC_APP_URL", "http://localhost:8020").strip().rstrip("/")
 if PUBLIC_APP_URL and not PUBLIC_APP_URL.startswith("http"):
     PUBLIC_APP_URL = f"https://{PUBLIC_APP_URL}"
 CSRF_TRUSTED_ORIGINS = [o for o in env("CSRF_TRUSTED_ORIGINS", PUBLIC_APP_URL).split(",") if o]
@@ -112,7 +113,7 @@ if not env("PUBLIC_APP_URL") and not DEBUG:
     # Fallback until PUBLIC_APP_URL is set; the CSRF token and SameSite cookies still apply.
     CSRF_TRUSTED_ORIGINS.append("https://*.up.railway.app")
 if DEBUG:
-    CSRF_TRUSTED_ORIGINS += [f"http://{h}:{p}" for h in ("localhost", "127.0.0.1") for p in range(3000, 3006)]
+    CSRF_TRUSTED_ORIGINS += [f"http://{h}:{p}" for h in ("localhost", "127.0.0.1") for p in [*range(3000, 3006), 8020]]
 SESSION_COOKIE_NAME = "tl_session"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
@@ -137,9 +138,17 @@ if not DEBUG and SECRET_KEY.startswith("dev-"):
 
 # Providers: "fake" runs the whole pipeline offline for $0.
 LLM_PROVIDER = env("LLM_PROVIDER", "fake")  # fake | openrouter
+# Chat and story generation run in background threads; tests run them inline.
+TASKS_EAGER = env_bool("TASKS_EAGER", False)
+# How long the fake LLM takes to "stream" a reply, so the live UI can be developed offline.
+FAKE_LLM_STREAM_SECONDS = float(env("FAKE_LLM_STREAM_SECONDS", "4"))
 IMAGE_PROVIDER = env("IMAGE_PROVIDER", "fake")  # fake | fal
 VIDEO_PROVIDER = env("VIDEO_PROVIDER", "fake")  # fake | fal
 TTS_PROVIDER = env("TTS_PROVIDER", "fake")  # fake | fal
+
+# The test suite must never call paid providers, whatever .env says.
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    LLM_PROVIDER = IMAGE_PROVIDER = VIDEO_PROVIDER = TTS_PROVIDER = "fake"
 
 OPENROUTER_API_KEY = env("OPENROUTER_API_KEY", "")
 LLM_BASE_URL = env("LLM_BASE_URL", "https://openrouter.ai/api/v1")

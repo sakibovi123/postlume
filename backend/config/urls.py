@@ -35,6 +35,7 @@ api = [
     path("stories/<int:pk>/rewrite", st.StoryRewriteView.as_view()),
     path("stories/<int:pk>/restore", st.StoryRestoreView.as_view()),
     path("stories/<int:pk>/videos", st.StartRenderView.as_view()),
+    path("tasks/<int:pk>", st.TaskView.as_view()),
     path("videos", st.VideosView.as_view()),
     path("videos/<int:pk>", st.VideoDetailView.as_view()),
     path("videos/<int:pk>/retry", st.RetryView.as_view()),

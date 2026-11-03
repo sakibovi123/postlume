@@ -64,7 +64,7 @@ export default function BillingPage() {
         <h2 className="mb-3 font-medium">Plans <Badge tone="warn">demo switch, no payment</Badge></h2>
         <div className="grid gap-4 md:grid-cols-3">
           {Object.entries(data.plans).map(([id, p]) => (
-            <Card key={id} className={cx("flex flex-col gap-3", id === data.plan && "border-violet")}>
+            <Card key={id} className={cx("flex flex-col gap-3", id === data.plan && "border-accent")}>
               <div className="flex items-center justify-between">
                 <p className="font-medium">{p.name}</p>
                 {id === data.plan && <Badge tone="accent">Current</Badge>}
@@ -119,7 +119,7 @@ export default function BillingPage() {
                     <td className="py-2 pr-4 whitespace-nowrap text-mute">{new Date(u.createdAt).toLocaleString()}</td>
                     <td className="py-2 pr-4">{ACTION_LABEL[u.action] ?? u.action} {u.refunded && <Badge tone="warn">refunded</Badge>}</td>
                     <td className="py-2 pr-4 text-mute">{u.note}</td>
-                    <td className={cx("py-2 pr-4 text-right font-mono", u.credits < 0 ? "text-coral" : "text-ok")}>
+                    <td className={cx("py-2 pr-4 text-right font-mono", u.credits < 0 ? "text-accent" : "text-ok")}>
                       {u.credits > 0 ? `+${u.credits}` : u.credits}
                     </td>
                     <td className="py-2 text-right font-mono text-mute">${u.estimatedCostUsd.toFixed(3)}</td>

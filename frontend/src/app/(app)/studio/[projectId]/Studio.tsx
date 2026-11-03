@@ -1,18 +1,20 @@
 "use client";
 
-import { Check, Pencil } from "lucide-react";
+import { MessageSquare, PanelLeftClose, Pencil } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { StageStepper } from "@/components/fx";
 import { useSession } from "@/components/session";
 import { BriefEditor } from "@/components/studio/BriefEditor";
 import { ChatPanel } from "@/components/studio/ChatPanel";
 import { StoryEditor } from "@/components/studio/StoryEditor";
+import { StoryLive } from "@/components/studio/StoryLive";
 import { VideoPanel } from "@/components/studio/VideoPanel";
 import { Card, cx, ErrorText, Input, PageLoading } from "@/components/ui";
 import { StatusBadge } from "@/components/video-bits";
 import { api } from "@/lib/api";
-import type { Billing, CreativeBrief, ProjectDetail, StylesInfo, Video } from "@/lib/types";
+import type { Billing, ChatMessage, CreativeBrief, GenTask, ProjectDetail, StylesInfo, Video } from "@/lib/types";
 
 type Stage = "brief" | "story" | "video";
 
@@ -33,6 +35,9 @@ export default function Studio() {
   const [videoId, setVideoId] = useState<number | null>(search.get("video") ? Number(search.get("video")) : null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState("");
+  const [chatOpen, setChatOpen] = useState(true);
+  const [storyTask, setStoryTask] = useState<GenTask | null>(null);
+  const [storyKey, setStoryKey] = useState(0);
 
   const loadBilling = useCallback(() => api.billing().then(setBilling).catch(() => setBilling(null)), []);
 
@@ -50,30 +55,41 @@ export default function Studio() {
         const lastBrief = [...p.messages].reverse().find((m) => m.brief)?.brief ?? null;
         setDraftBrief(lastBrief ?? (p.briefs[0] ? stripBrief(p.briefs[0]) : null));
         setVideoId((v) => v ?? p.videos[0]?.id ?? null);
-        setStage(p.videos.length ? "video" : p.stories.length ? "story" : "brief");
+        const running = p.tasks.find((t) => t.kind !== "director") ?? null;
+        setStoryTask(running);
+        setStage(running ? "story" : p.videos.length ? "video" : p.stories.length ? "story" : "brief");
+        if (p.videos.length) setChatOpen(false);
       })
       .catch(setError);
   }, [load, loadBilling]);
 
-  const reloadStory = useCallback(async () => {
-    await Promise.all([load(), loadBilling()]);
+  const startStoryTask = useCallback((t: GenTask) => {
+    setStoryTask(t);
     setStage("story");
+  }, []);
+
+  const finishStoryTask = useCallback(async () => {
+    await Promise.all([load(), loadBilling()]);
+    setStoryTask(null);
+    setStoryKey((k) => k + 1);
   }, [load, loadBilling]);
+
+  const addMessage = useCallback((m: ChatMessage) => {
+    setProject((p) => (p && !p.messages.some((x) => x.id === m.id) ? { ...p, messages: [...p.messages, m] } : p));
+  }, []);
 
   const onVideoChange = useCallback((v: Video) => {
     setProject((p) => (p ? { ...p, videos: p.videos.map((x) => (x.id === v.id ? { ...x, ...v } : x)) } : p));
     if (v.status === "ready" || v.status === "failed") loadBilling();
   }, [loadBilling]);
 
-  const latestBriefStory = useMemo(() => project?.stories ?? [], [project]);
-
   if (error) return <ErrorText error={error} />;
   if (!project || !styles || !stage) return <PageLoading />;
 
-  const stages: { id: Stage; label: string; enabled: boolean; done: boolean }[] = [
-    { id: "brief", label: "1. Brief", enabled: true, done: project.briefs.length > 0 },
-    { id: "story", label: "2. Story", enabled: project.stories.length > 0, done: project.stories.some((s) => s.status === "approved") },
-    { id: "video", label: "3. Video", enabled: project.videos.length > 0, done: project.videos.some((v) => v.status === "ready") },
+  const stages = [
+    { id: "brief", label: "Brief", enabled: true, done: project.briefs.length > 0 },
+    { id: "story", label: "Story", enabled: project.stories.length > 0 || !!storyTask, done: project.stories.some((s) => s.status === "approved") },
+    { id: "video", label: "Video", enabled: project.videos.length > 0, done: project.videos.some((v) => v.status === "ready") },
   ];
 
   async function saveTitle() {
@@ -85,49 +101,50 @@ export default function Studio() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px]">
-      <div className="mb-4 flex items-center gap-2">
-        {editingTitle ? (
-          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => e.key === "Enter" && saveTitle()} className="max-w-md text-lg" />
-        ) : (
-          <h1 className="truncate text-xl font-semibold">{project.title}</h1>
-        )}
-        {can("creator") && !editingTitle && (
-          <button onClick={() => setEditingTitle(true)} className="text-mute hover:text-ink" title="Rename">
-            <Pencil className="size-4" />
+    <div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            onClick={() => setChatOpen(!chatOpen)}
+            className={cx(
+              "grid size-10 shrink-0 place-items-center rounded-full border transition",
+              chatOpen ? "border-accent/40 bg-accent/10 text-accent" : "border-white/10 bg-white/[0.04] text-mute hover:text-ink",
+            )}
+            title={chatOpen ? "Hide director" : "Show director"}
+          >
+            {chatOpen ? <PanelLeftClose className="size-4" /> : <MessageSquare className="size-4" />}
           </button>
-        )}
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)]">
-          <ChatPanel
-            project={project}
-            styles={styles}
-            onMessages={(messages) => setProject({ ...project, messages })}
-            onUseBrief={(b) => {
-              setDraftBrief(b);
-              setBriefKey((k) => k + 1);
-              setStage("brief");
-            }}
-          />
+          {editingTitle ? (
+            <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => e.key === "Enter" && saveTitle()} className="max-w-md text-lg" />
+          ) : (
+            <h1 className="truncate text-2xl font-semibold tracking-tight">{project.title}</h1>
+          )}
+          {can("creator") && !editingTitle && (
+            <button onClick={() => setEditingTitle(true)} className="text-mute hover:text-ink" title="Rename">
+              <Pencil className="size-4" />
+            </button>
+          )}
         </div>
-        <div className="min-w-0 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {stages.map((s) => (
-              <button
-                key={s.id}
-                disabled={!s.enabled}
-                onClick={() => setStage(s.id)}
-                className={cx(
-                  "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm disabled:opacity-40",
-                  stage === s.id ? "border-violet bg-violet/15 text-ink" : "border-line text-mute hover:text-ink",
-                )}
-              >
-                {s.done && <Check className="size-3.5 text-ok" />} {s.label}
-              </button>
-            ))}
-          </div>
+        <StageStepper steps={stages} current={stage} onSelect={(s) => setStage(s as Stage)} />
+      </div>
 
+      <div className={cx("grid gap-6", chatOpen && "lg:grid-cols-[380px_1fr]")}>
+        {chatOpen && (
+          <div className="animate-fade-in lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
+            <ChatPanel
+              project={project}
+              styles={styles}
+              onMessage={addMessage}
+              onUseBrief={(b) => {
+                setDraftBrief(b);
+                setBriefKey((k) => k + 1);
+                setStage("brief");
+              }}
+            />
+          </div>
+        )}
+
+        <div key={stage} className="min-w-0 animate-fade-up space-y-4">
           {stage === "brief" &&
             (draftBrief || can("creator") ? (
               <BriefEditor
@@ -136,7 +153,7 @@ export default function Studio() {
                 initial={draftBrief}
                 styles={styles}
                 storyCredits={billing?.quotes.story_generate ?? 1}
-                onStory={reloadStory}
+                onTask={startStoryTask}
               />
             ) : (
               <Card>
@@ -144,19 +161,34 @@ export default function Studio() {
               </Card>
             ))}
 
-          {stage === "story" && latestBriefStory.length > 0 && (
+          {stage === "story" && storyTask && (
+            <StoryLive
+              key={storyTask.id}
+              task={storyTask}
+              onDone={finishStoryTask}
+              onBack={() => {
+                setStoryTask(null);
+                loadBilling();
+                if (!project.stories.length) setStage("brief");
+              }}
+            />
+          )}
+
+          {stage === "story" && !storyTask && project.stories.length > 0 && (
             <StoryEditor
-              stories={latestBriefStory}
+              stories={project.stories}
               briefs={project.briefs}
               styles={styles}
               billing={billing}
               onChanged={async () => {
                 await Promise.all([load(), loadBilling()]);
               }}
-              key={project.id}
+              key={storyKey}
+              onTask={startStoryTask}
               onRender={(v) => {
                 setVideoId(v.id);
                 setStage("video");
+                setChatOpen(false);
                 router.replace(`/studio/${project.id}?video=${v.id}`);
               }}
             />
@@ -174,11 +206,11 @@ export default function Studio() {
                         router.replace(`/studio/${project.id}?video=${v.id}`);
                       }}
                       className={cx(
-                        "flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs",
-                        v.id === videoId ? "border-violet bg-violet/10" : "border-line hover:border-mute/50",
+                        "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition",
+                        v.id === videoId ? "border-accent/50 bg-accent/10" : "border-white/10 hover:border-white/25",
                       )}
                     >
-                      #{v.id} · v{v.storyVersion} · {v.tier} <StatusBadge status={v.status} />
+                      Take {v.id} · story v{v.storyVersion} · <span className="capitalize">{v.tier}</span> <StatusBadge status={v.status} />
                     </button>
                   ))}
                 </div>

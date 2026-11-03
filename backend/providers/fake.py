@@ -4,9 +4,13 @@ import hashlib
 import random
 import re
 import textwrap
+import time
 import wave
 from pathlib import Path
 
+import json
+
+from django.conf import settings
 from PIL import Image, ImageDraw, ImageFont
 
 from apps.studio.schemas import CreativeBrief, DirectorReply, ScenePlan, StoryOut
@@ -30,15 +34,28 @@ def _sentences(text):
 class FakeLlm:
     name = "fake-llm"
 
-    def structured(self, kind, system, messages, schema, hint=None):
+    def structured(self, kind, system, messages, schema, hint=None, on_text=None):
         hint = hint or {}
         if schema is DirectorReply:
-            return self._director(messages, hint), 0.0
-        if schema is StoryOut:
-            return self._story(hint), 0.0
-        if schema is ScenePlan:
-            return self._scenes(hint), 0.0
-        raise NotImplementedError(schema)
+            out = self._director(messages, hint)
+        elif schema is StoryOut:
+            out = self._story(hint)
+        elif schema is ScenePlan:
+            out = self._scenes(hint)
+        else:
+            raise NotImplementedError(schema)
+        if on_text:
+            self._stream(out, on_text, settings.FAKE_LLM_STREAM_SECONDS * (0.5 if schema is DirectorReply else 1))
+        return out, 0.0
+
+    def _stream(self, out, on_text, seconds):
+        text = out.model_dump_json() if hasattr(out, "model_dump_json") else json.dumps(out)
+        step = 8
+        pause = seconds / max(1, len(text) / step)
+        for i in range(step, len(text) + step, step):
+            on_text(text[:i])
+            if pause:
+                time.sleep(pause)
 
     def _director(self, messages, hint):
         text = " ".join(m["content"] for m in messages if m["role"] == "user").lower()

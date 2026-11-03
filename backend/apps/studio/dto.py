@@ -49,4 +49,7 @@ def project_dto(p, detail=False):
         data["briefs"] = [brief_dto(b) for b in p.briefs.order_by("-created_at")]
         data["stories"] = [story_dto(s) for s in p.stories.all()]
         data["videos"] = [video_dto(v) for v in p.videos.select_related("story__brief").order_by("-created_at")]
+        from .tasks import active_tasks
+
+        data["tasks"] = active_tasks(p)
     return data

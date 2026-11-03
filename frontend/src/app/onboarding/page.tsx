@@ -23,7 +23,7 @@ export default function Onboarding() {
               key={s}
               className={cx(
                 "flex items-center gap-2 rounded-full border px-3 py-1",
-                i < step ? "border-ok/40 text-ok" : i === step ? "border-violet text-ink" : "border-line text-mute",
+                i < step ? "border-ok/40 text-ok" : i === step ? "border-accent text-ink" : "border-line text-mute",
               )}
             >
               {i < step ? <Check className="size-3.5" /> : <span>{i + 1}</span>} {s}
@@ -55,7 +55,7 @@ export default function Onboarding() {
             <p className="text-sm text-mute">Pick a style, describe an idea, and the director takes it from there.</p>
             <Link
               href="/studio/new"
-              className="accent-gradient mx-auto inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white"
+              className="accent-gradient mx-auto inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-black"
             >
               Start creating <ArrowRight className="size-4" />
             </Link>

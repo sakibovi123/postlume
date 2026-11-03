@@ -25,14 +25,18 @@ class OpenRouterLlm:
 
     name = "openrouter"
 
-    def structured(self, kind, system, messages, schema, hint=None):
+    def structured(self, kind, system, messages, schema, hint=None, on_text=None):
         model = settings.LLM_STORY_MODEL if kind == "story" else settings.LLM_CHAT_MODEL
         convo = [{"role": "system", "content": system}, *messages]
         total_cost = 0.0
         for attempt in range(2):
-            data = self._call(model, convo, schema)
-            total_cost += float((data.get("usage") or {}).get("cost") or 0)
-            content = data["choices"][0]["message"].get("content") or ""
+            if on_text:
+                content, cost = self._stream(model, convo, schema, on_text)
+                total_cost += cost
+            else:
+                data = self._call(model, convo, schema)
+                total_cost += float((data.get("usage") or {}).get("cost") or 0)
+                content = data["choices"][0]["message"].get("content") or ""
             try:
                 return schema.model_validate(json.loads(_extract_json(content))), total_cost
             except (json.JSONDecodeError, ValidationError) as e:
@@ -41,10 +45,10 @@ class OpenRouterLlm:
                          {"role": "user", "content": f"That JSON was invalid: {e}. Reply with corrected JSON only."}]
         raise ProviderError("The model did not return valid structured output.")
 
-    def _call(self, model, messages, schema):
+    def _body(self, model, messages, schema):
         if not settings.OPENROUTER_API_KEY and "openrouter.ai" in settings.LLM_BASE_URL:
             raise ProviderError("OPENROUTER_API_KEY is not set.")
-        body = {
+        return {
             "model": model,
             "messages": messages,
             "response_format": {
@@ -53,13 +57,49 @@ class OpenRouterLlm:
             },
             "usage": {"include": True},
         }
-        headers = {
+
+    def _headers(self):
+        return {
             "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
             "HTTP-Referer": settings.PUBLIC_APP_URL,
             "X-Title": "Taleloop",
         }
+
+    def _stream(self, model, messages, schema, on_text):
+        body = {**self._body(model, messages, schema), "stream": True}
+        content, cost = "", 0.0
         try:
-            r = httpx.post(f"{settings.LLM_BASE_URL}/chat/completions", json=body, headers=headers, timeout=180)
+            with httpx.stream("POST", f"{settings.LLM_BASE_URL}/chat/completions", json=body,
+                              headers=self._headers(), timeout=httpx.Timeout(180, read=90)) as r:
+                if r.status_code >= 400:
+                    r.read()
+                    raise ProviderError(f"LLM returned {r.status_code}: {r.text[:500]}")
+                for line in r.iter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line[5:].strip()
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if chunk.get("error"):
+                        raise ProviderError(f"LLM stream error: {str(chunk['error'])[:500]}")
+                    cost += float((chunk.get("usage") or {}).get("cost") or 0)
+                    for choice in chunk.get("choices") or []:
+                        delta = (choice.get("delta") or {}).get("content") or ""
+                        if delta:
+                            content += delta
+                            on_text(content)
+        except httpx.HTTPError as e:
+            raise ProviderError(f"LLM request failed: {e}") from e
+        return content, cost
+
+    def _call(self, model, messages, schema):
+        body = self._body(model, messages, schema)
+        try:
+            r = httpx.post(f"{settings.LLM_BASE_URL}/chat/completions", json=body, headers=self._headers(), timeout=180)
         except httpx.HTTPError as e:
             raise ProviderError(f"LLM request failed: {e}") from e
         if r.status_code >= 400:

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Runs Django (8000), the render worker and Next.js (3000) together. Ctrl+C stops all three.
+# Runs Django (8000), the render worker and Next.js (8020) together. Ctrl+C stops all three.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-PORT="${PORT:-3000}"
+PORT="${PORT:-8020}"
 
 if [ ! -d "$ROOT/backend/.venv" ]; then
   echo "Run ./setup.sh first."; exit 1

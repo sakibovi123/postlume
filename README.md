@@ -4,7 +4,7 @@ AI content studio: chat with an AI director, approve a story, and render it into
 Phase 1 per [requirements.md](requirements.md), with a Django backend and a Next.js frontend.
 
 ```text
-browser ──▶ frontend (Next.js 16, :3000) ──proxy /api, /media──▶ backend (Django + DRF, :8000)
+browser ──▶ frontend (Next.js 16, :8020) ──proxy /api, /media──▶ backend (Django + DRF, :8000)
                                                                    │  SQLite (db.sqlite3)
                                                                    └─ jobs table ──▶ worker (manage.py runworker)
                                                                         LLM / image / video / TTS providers + FFmpeg
@@ -17,10 +17,10 @@ Needs Python 3.12+, [uv](https://docs.astral.sh/uv/), Node 20+ and pnpm. FFmpeg 
 
 ```bash
 ./setup.sh      # venv, dependencies, backend/.env, migrations, pnpm install
-./dev.sh        # Django :8000 + render worker + Next.js :3000  (PORT=3001 ./dev.sh to change)
+./dev.sh        # Django :8000 + render worker + Next.js :8020  (PORT=8021 ./dev.sh to change)
 ```
 
-Open http://localhost:3000, sign up, and make a video. By default every provider is `fake`, so the whole
+Open http://localhost:8020, sign up, and make a video. By default every provider is `fake`, so the whole
 pipeline (chat → brief → story → scenes → keyframes → voice → captions → MP4) runs offline for $0 with
 placeholder images and silent narration.
 

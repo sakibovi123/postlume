@@ -8,4 +8,4 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python manage.py migrate
 cd "$ROOT/frontend"
 pnpm install
-echo "Done. Start everything with ./dev.sh and open http://localhost:3000"
+echo "Done. Start everything with ./dev.sh and open http://localhost:8020"
