@@ -1,112 +1,203 @@
 "use client";
 
-import { ArrowUpRight, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { ArrowUp, Clapperboard } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { Stagger } from "@/components/fx";
-import { useSession } from "@/components/session";
-import { Composer } from "@/components/studio/Composer";
-import { cx, Empty, ErrorText, PageLoading } from "@/components/ui";
-import { PRESET_LOOK, StatusBadge } from "@/components/video-bits";
+import { GenerationCard, length } from "@/components/generate/GenerationCard";
+import { ModelPicker } from "@/components/generate/ModelPicker";
+import { Chip, Empty, ErrorText, PageLoading, Spinner } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { ProjectSummary, StylePreset, StylesInfo } from "@/lib/types";
+import type { FalField, FalModel, FalModelInfo, Generation } from "@/lib/types";
 
-export default function StudioHome() {
-  const { can } = useSession();
-  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
-  const [styles, setStyles] = useState<StylesInfo | null>(null);
+type Opt = string | number;
+const SETTINGS = [
+  { name: "duration", label: "Length" },
+  { name: "aspect_ratio", label: "Ratio" },
+  { name: "resolution", label: "Quality" },
+];
+
+function optionsFor(f: FalField): Opt[] {
+  if (f.type === "enum") return (f.options ?? []) as Opt[];
+  if ((f.type === "integer" || f.type === "number") && f.name === "duration") {
+    const lo = f.min ?? 1;
+    const hi = f.max ?? 10;
+    return [5, 10, 15, 20, 30].filter((d) => d >= lo && d <= hi);
+  }
+  return [];
+}
+
+const LONG = [30, 60, 120, 180, 300, 600];
+const isNum = (o: Opt) => /^\d+(\.\d+)?$/.test(String(o));
+const fmt = (name: string, o: Opt) => (name === "duration" && isNum(o) ? length(Number(o)) : String(o));
+
+export default function VideoSandbox() {
+  const [models, setModels] = useState<FalModel[] | null>(null);
+  const [model, setModel] = useState("");
+  const [schema, setSchema] = useState<{ id: string; info: FalModelInfo } | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [picked, setPicked] = useState<Record<string, Opt>>({ duration: 10 });
+  const [gens, setGens] = useState<Generation[] | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    api.projects().then(setProjects).catch(setError);
-    api.styles().then(setStyles).catch(setError);
+    api.genCategories().then((m) => setModel((cur) => cur || m.bestVideoModel)).catch(setError);
+    api.genModels("text-to-video").then(setModels).catch((e) => (setError(e), setModels([])));
+    api.generations().then(setGens).catch(setError);
   }, []);
 
-  async function remove(id: number) {
-    if (!confirm("Delete this project, its stories and videos?")) return;
+  useEffect(() => {
+    if (!model) return;
+    let cancelled = false;
+    api
+      .genSchema(model)
+      .then((info) => !cancelled && setSchema({ id: model, info }))
+      .catch((e) => !cancelled && setError(e));
+    return () => {
+      cancelled = true;
+    };
+  }, [model]);
+
+  const active = gens?.some((g) => g.status === "queued" || g.status === "running");
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => api.generations().then(setGens).catch(() => {}), 2500);
+    return () => clearTimeout(t);
+  }, [active, gens]);
+
+  const info = schema?.id === model ? schema.info : null;
+  const promptField = info?.fields.find((f) => f.name === "prompt") ?? info?.fields.find((f) => f.type === "text");
+  const settings = SETTINGS.flatMap(({ name, label }) => {
+    const f = info?.fields.find((x) => x.name === name);
+    let options = f ? optionsFor(f) : [];
+    if (name === "duration" && options.length) {
+      const max = Math.max(...options.filter(isNum).map(Number));
+      options = [...options, ...LONG.filter((d) => d > max)];
+    }
+    if (!f || options.length < 2) return [];
+    const want = picked[name];
+    const value = options.find((o) => String(o) === String(want)) ?? options.find((o) => String(o) === String(f.default)) ?? options[0];
+    return [{ name, label, options, value }];
+  });
+  const missing = info?.fields.filter((f) => f.required && f.default == null && f !== promptField) ?? [];
+  const current = models?.find((m) => m.id === model);
+  const unit = info?.price;
+  const durationField = info?.fields.find((f) => f.name === "duration");
+  const nativeMax = durationField ? Math.max(0, ...optionsFor(durationField).filter(isNum).map(Number)) : 0;
+  const seconds = Number(settings.find((s) => s.name === "duration")?.value ?? 5);
+  const long = nativeMax > 0 && seconds > nativeMax;
+  const shots = long ? Math.ceil(seconds / nativeMax) : 1;
+  const clipSeconds = long ? nativeMax : seconds;
+  const usd = unit ? (unit.unit.toLowerCase().startsWith("second") ? unit.unitPrice * clipSeconds : unit.unitPrice) * shots : null;
+
+  async function generate() {
+    if (!prompt.trim() || !info || !promptField) return;
+    setBusy(true);
+    setError(null);
     try {
-      await api.deleteProject(id);
-      setProjects((p) => p?.filter((x) => x.id !== id) ?? null);
+      const input: Record<string, unknown> = { [promptField.name]: prompt.trim() };
+      for (const s of settings) if (!(long && s.name === "duration")) input[s.name] = s.value;
+      if (long && usd !== null && usd > 3 && !confirm(`This makes ${shots} clips and costs about $${usd.toFixed(2)} on fal. Continue?`)) return;
+      const g = await api.generate({
+        endpointId: model, modelName: current?.name ?? model, category: "text-to-video", input,
+        totalSeconds: long ? seconds : undefined,
+      });
+      setGens((list) => [g, ...(list ?? [])]);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function reuse(g: Generation) {
+    setModel(g.endpointId);
+    setPrompt(String(g.input.prompt ?? g.input.text ?? ""));
+    const next: Record<string, Opt> = {};
+    for (const { name } of SETTINGS) if (typeof g.input[name] === "string" || typeof g.input[name] === "number") next[name] = g.input[name] as Opt;
+    if (g.plan) next.duration = g.plan.totalSeconds;
+    setPicked((p) => ({ ...p, ...next }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function remove(g: Generation) {
+    if (!confirm("Delete this video?")) return;
+    try {
+      await api.deleteGeneration(g.id);
+      setGens((list) => list?.filter((x) => x.id !== g.id) ?? null);
     } catch (e) {
       setError(e);
     }
   }
 
   return (
-    <div className="space-y-16">
-      <section className="relative mx-auto max-w-4xl pt-4 text-center md:pt-10">
-        <p className="mx-auto mb-5 inline-flex animate-fade-up items-center gap-2 rounded-full border border-accent/25 bg-accent/[0.06] px-3 py-1 text-xs font-medium text-accent">
-          <span className="size-1.5 animate-pulse rounded-full bg-accent" /> AI story director
-        </p>
-        <h1 className="animate-fade-up text-4xl font-semibold leading-[1.05] tracking-tight [animation-delay:80ms] md:text-6xl">
-          Turn any idea into a <span className="text-gradient">story video</span>
+    <div className="mx-auto max-w-5xl space-y-10">
+      <div className="animate-fade-up space-y-2 pt-4 text-center">
+        <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
+          Type it. <span className="text-gradient">Watch it.</span>
         </h1>
-        <p className="mx-auto mt-4 max-w-xl animate-fade-up text-mute [animation-delay:160ms]">
-          Describe it once. The director writes the story, you approve it, and Taleloop renders scenes, voice and music.
-        </p>
-        {can("creator") && styles && (
-          <div className="mt-10 animate-fade-up text-left [animation-delay:240ms]">
-            <Composer styles={styles} showStyles={false} />
-          </div>
-        )}
-      </section>
+        <p className="text-sm text-mute">Prompt in, video out — pick any text-to-video model on fal.ai.</p>
+      </div>
 
-      <section>
-        <div className="mb-5 flex items-end justify-between">
-          <h2 className="text-xl font-semibold tracking-tight">Your projects</h2>
-          <Link href="/library" className="flex items-center gap-1 text-sm text-mute hover:text-accent">
-            All videos <ArrowUpRight className="size-4" />
-          </Link>
+      <div className="glass glow relative z-10 animate-fade-up space-y-3 rounded-3xl p-4">
+        <div className="max-w-md">
+          <ModelPicker models={models} value={model} onChange={setModel} />
         </div>
-        <ErrorText error={error} />
-        {!projects ? (
+        <textarea
+          autoFocus
+          rows={5}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === "Enter" && generate()}
+          placeholder="Describe the video: characters, action, camera, style, sound…"
+          className="w-full resize-none bg-transparent px-2 py-1 text-base leading-relaxed outline-none placeholder:text-mute/60"
+        />
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-white/[0.06] pt-3">
+          {!info && model && <span className="skeleton h-7 w-64 rounded-full" />}
+          {settings.map((s) => (
+            <div key={s.name} className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs text-mute">{s.label}</span>
+              {s.options.map((o) => (
+                <Chip key={String(o)} active={o === s.value} onClick={() => setPicked((p) => ({ ...p, [s.name]: o }))}>
+                  {fmt(s.name, o)}
+                </Chip>
+              ))}
+            </div>
+          ))}
+          <div className="ml-auto flex items-center gap-3">
+            {usd !== null && (
+              <span className="text-xs text-mute">
+                {long && <>{shots} shots · </>}≈ ${usd.toFixed(2)}
+              </span>
+            )}
+            <button
+              onClick={generate}
+              disabled={busy || !prompt.trim() || !info || !promptField}
+              className="accent-gradient flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition hover:brightness-110 disabled:opacity-40"
+            >
+              {busy ? <Spinner className="size-4" /> : <ArrowUp className="size-4" strokeWidth={2.5} />} Generate
+            </button>
+          </div>
+        </div>
+        {missing.length > 0 && (
+          <p className="text-xs text-warn">This model also needs {missing.map((f) => f.title.toLowerCase()).join(", ")} — use All models for full settings.</p>
+        )}
+      </div>
+      <ErrorText error={error} />
+
+      <section className="space-y-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <Clapperboard className="size-5 text-accent" /> Your videos
+        </h2>
+        {!gens ? (
           <PageLoading />
-        ) : projects.length === 0 ? (
-          <Empty title="No projects yet">Type an idea above to make your first video.</Empty>
+        ) : gens.length === 0 ? (
+          <Empty title="No videos yet">Write a prompt above and hit Generate.</Empty>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {projects.map((p, i) => {
-              const look = PRESET_LOOK[(p.stylePreset || "custom") as StylePreset] ?? PRESET_LOOK.custom;
-              return (
-                <Stagger key={p.id} index={Math.min(i, 8)}>
-                  <div className="group relative overflow-hidden rounded-3xl border border-white/[0.07] bg-panel transition duration-300 hover:-translate-y-1 hover:border-accent/40">
-                    <Link href={`/studio/${p.id}`} className="block">
-                      <div className={cx("relative aspect-[16/10] overflow-hidden bg-linear-to-br", look.gradient)}>
-                        {p.latestVideo?.thumbnailUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.latestVideo.thumbnailUrl} alt="" className="size-full object-cover transition duration-500 group-hover:scale-105" />
-                        ) : (
-                          <span className="absolute inset-0 grid place-items-center text-5xl transition duration-500 group-hover:scale-110">{look.emoji}</span>
-                        )}
-                        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent" />
-                        {p.latestVideo && (
-                          <span className="absolute left-3 top-3">
-                            <StatusBadge status={p.latestVideo.status} />
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between gap-2 p-4">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{p.title}</p>
-                          <p className="text-xs text-mute">{new Date(p.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                        </div>
-                        <ArrowUpRight className="size-4 shrink-0 text-mute transition group-hover:text-accent" />
-                      </div>
-                    </Link>
-                    {can("admin") && (
-                      <button
-                        onClick={() => remove(p.id)}
-                        className="absolute right-3 top-3 rounded-full bg-black/60 p-2 text-white/80 opacity-0 backdrop-blur transition group-hover:opacity-100 hover:text-bad"
-                        title="Delete project"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </Stagger>
-              );
-            })}
+          <div className="grid gap-4 md:grid-cols-2">
+            {gens.map((g) => (
+              <GenerationCard key={g.id} gen={g} onReuse={reuse} onDelete={remove} />
+            ))}
           </div>
         )}
       </section>

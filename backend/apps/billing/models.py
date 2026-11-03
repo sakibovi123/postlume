@@ -25,6 +25,7 @@ class Action(models.TextChoices):
     VIDEO_RENDER = "video_render"
     SCENE_REGENERATE = "scene_regenerate"
     VIDEO_REASSEMBLE = "video_reassemble"
+    GENERATE = "generate"
     GRANT = "grant"
     REFUND = "refund"
 

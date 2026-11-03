@@ -5,6 +5,7 @@ export type StylePreset =
   | "animated_3d"
   | "cartoon"
   | "anime_2d"
+  | "anime_action"
   | "cinematic"
   | "storybook"
   | "comic"
@@ -214,4 +215,71 @@ export interface SocialAccount {
 export interface Members {
   members: { id: number; userId: number; email: string; name: string; role: Role }[];
   invitations: { id: number; email: string; role: Role; token: string | null }[];
+}
+
+export interface GenCategory {
+  id: string;
+  label: string;
+  output: "video" | "image" | "audio";
+}
+
+export interface FalModel {
+  id: string;
+  name: string;
+  description: string;
+  thumbnail: string;
+  tags: string[];
+  category: string;
+  featured: boolean;
+}
+
+export interface FalField {
+  name: string;
+  title: string;
+  description: string;
+  type: "text" | "string" | "enum" | "boolean" | "integer" | "number" | "file" | "files" | "json";
+  default: unknown;
+  required: boolean;
+  nullable: boolean;
+  advanced: boolean;
+  options?: (string | number)[];
+  min?: number | null;
+  max?: number | null;
+  accept?: "image" | "video" | "audio" | "any";
+  maxItems?: number | null;
+  maxLength?: number | null;
+}
+
+export interface FalModelInfo {
+  id: string;
+  category: string;
+  thumbnail: string;
+  fields: FalField[];
+  price: { unitPrice: number; unit: string; currency: string } | null;
+}
+
+export interface GenMedia {
+  type: "video" | "image" | "audio";
+  url: string;
+  remote: string;
+}
+
+export interface Generation {
+  id: number;
+  endpointId: string;
+  category: string;
+  modelName: string;
+  input: Record<string, unknown>;
+  status: "queued" | "running" | "done" | "failed";
+  queuePosition: number | null;
+  logs: string[];
+  media: GenMedia[];
+  costUsd: number;
+  credits: number;
+  error: string;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  seconds: number;
+  plan: { totalSeconds: number; clipSeconds: number; count: number; done: number } | null;
 }

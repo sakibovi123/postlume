@@ -1,6 +1,6 @@
 "use client";
 
-import { Coins, Film, LogOut, Plug, Plus, Users, WandSparkles, Zap } from "lucide-react";
+import { Coins, Film, LogOut, Plug, Plus, Sparkles, Users, WandSparkles, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -12,6 +12,7 @@ import { cx, PageLoading } from "./ui";
 
 const NAV = [
   { href: "/studio", label: "Create", icon: WandSparkles },
+  { href: "/generate", label: "All models", icon: Sparkles },
   { href: "/library", label: "Library", icon: Film },
   { href: "/settings/connections", label: "Connections", icon: Plug },
   { href: "/settings/team", label: "Team", icon: Users },
@@ -57,7 +58,7 @@ function UserMenu() {
         {initial}
       </button>
       {open && (
-        <div className="glass absolute right-0 top-11 z-50 w-64 animate-scale-in space-y-3 rounded-2xl bg-panel/95 p-3 shadow-2xl">
+        <div className="absolute right-0 top-11 z-50 w-64 animate-scale-in space-y-3 rounded-2xl border border-white/10 bg-panel p-3 shadow-2xl">
           <div className="px-1">
             <p className="truncate text-sm font-medium">{me.user.name || me.user.email}</p>
             <p className="truncate text-xs text-mute">{me.user.email}</p>
@@ -122,7 +123,7 @@ function TopBar() {
           </Link>
           {can("creator") && (
             <Link
-              href="/studio/new"
+              href="/studio"
               className="accent-gradient flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition hover:brightness-110"
             >
               <Plus className="size-4" strokeWidth={2.5} /> <span className="hidden sm:inline">New video</span>

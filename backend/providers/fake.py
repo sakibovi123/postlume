@@ -20,7 +20,8 @@ from .base import ImageResult, TtsResult, VideoResult, even_word_timings
 WORDS_PER_SECOND = 2.6
 
 PRESET_WORDS = {
-    "animated_3d": ["3d", "pixar", "animated"], "cartoon": ["cartoon"], "anime_2d": ["anime"],
+    "animated_3d": ["3d", "pixar", "animated"], "cartoon": ["cartoon"], "anime_action": ["anime fight", "anime battle", "shonen"],
+    "anime_2d": ["anime"],
     "cinematic": ["cinematic", "movie", "film"], "storybook": ["watercolor", "storybook", "kids"],
     "comic": ["comic"], "documentary": ["documentary", "realistic"],
 }
@@ -42,6 +43,8 @@ class FakeLlm:
             out = self._story(hint)
         elif schema is ScenePlan:
             out = self._scenes(hint)
+        elif "shotCount" in hint:
+            out = schema(shots=[f"{hint['prompt']} (shot {i + 1} of {hint['shotCount']})" for i in range(hint["shotCount"])])
         else:
             raise NotImplementedError(schema)
         if on_text:

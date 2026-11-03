@@ -3,6 +3,7 @@ from django.urls import include, path, re_path
 
 from apps.accounts import views as acc
 from apps.billing import views as bill
+from apps.generate import views as gen
 from apps.social import views as soc
 from apps.studio import views as st
 
@@ -36,6 +37,12 @@ api = [
     path("stories/<int:pk>/restore", st.StoryRestoreView.as_view()),
     path("stories/<int:pk>/videos", st.StartRenderView.as_view()),
     path("tasks/<int:pk>", st.TaskView.as_view()),
+    path("generate/categories", gen.CategoriesView.as_view()),
+    path("generate/models", gen.ModelsView.as_view()),
+    path("generate/schema", gen.ModelSchemaView.as_view()),
+    path("generate/upload", gen.UploadView.as_view()),
+    path("generations", gen.GenerationsView.as_view()),
+    path("generations/<int:pk>", gen.GenerationDetailView.as_view()),
     path("videos", st.VideosView.as_view()),
     path("videos/<int:pk>", st.VideoDetailView.as_view()),
     path("videos/<int:pk>/retry", st.RetryView.as_view()),

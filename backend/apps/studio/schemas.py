@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-StylePreset = Literal["animated_3d", "cartoon", "anime_2d", "cinematic", "storybook", "comic", "documentary", "custom"]
+StylePreset = Literal["animated_3d", "cartoon", "anime_2d", "anime_action", "cinematic", "storybook", "comic", "documentary", "custom"]
 
 
 class CreativeBrief(BaseModel):

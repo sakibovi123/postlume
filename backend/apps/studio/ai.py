@@ -38,6 +38,12 @@ Ask a short clarifying question only when something important (mainly the idea) 
 defaults (9:16, 30 seconds, af_heart, a fitting mood) and propose a complete brief right away.
 Whenever you have enough to propose or update the brief, include it in "brief"; otherwise set "brief" to null.
 Keep "reply" under 80 words and tell the user they can confirm the brief or ask for changes.
+If the user names copyrighted or franchise characters, do not stop or ask them for alternatives: invent original
+characters with new names and new designs that only share a broad archetype (e.g. "a reckless fire-wielding young
+mage" vs "an ancient, calm warlord"), never the franchise's names, signature outfits, symbols or powers by name.
+Propose the full brief with them in "idea" right away and say in one short sentence that you swapped in originals.
+The video has narration and background music only; there are no sound effects. If asked for sound effects, say so
+briefly and choose a fitting music mood instead (e.g. "epic" for fights).
 {SAFETY_RULES}
 Respond only with JSON matching the schema."""
 

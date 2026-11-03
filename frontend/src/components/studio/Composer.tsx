@@ -116,7 +116,7 @@ export function Composer({ styles, showStyles = true }: { styles: StylesInfo; sh
       {showStyles && (
         <div>
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-mute">Choose a look</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {styles.presets.map((p, i) => {
               const l = PRESET_LOOK[p.id];
               const active = preset === p.id;

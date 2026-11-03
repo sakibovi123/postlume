@@ -25,6 +25,7 @@ export const PRESET_LOOK: Record<StylePreset, { gradient: string; emoji: string;
   animated_3d: { gradient: "from-sky-500 via-indigo-500 to-fuchsia-500", emoji: "🧸", blurb: "Soft 3D film look, original characters" },
   cartoon: { gradient: "from-yellow-300 via-orange-400 to-rose-500", emoji: "🎨", blurb: "Bold outlines, bright flat colors" },
   anime_2d: { gradient: "from-pink-400 via-fuchsia-500 to-indigo-600", emoji: "🌸", blurb: "Cel shading, painted backgrounds" },
+  anime_action: { gradient: "from-amber-300 via-orange-500 to-blue-700", emoji: "⚡", blurb: "Battle auras, speed lines, impact" },
   cinematic: { gradient: "from-teal-700 via-slate-800 to-orange-500", emoji: "🎬", blurb: "Live-action look, film grade" },
   storybook: { gradient: "from-emerald-300 via-lime-200 to-amber-300", emoji: "📖", blurb: "Watercolor, gentle and warm" },
   comic: { gradient: "from-red-500 via-orange-500 to-yellow-300", emoji: "💥", blurb: "Inked panels, halftone shading" },

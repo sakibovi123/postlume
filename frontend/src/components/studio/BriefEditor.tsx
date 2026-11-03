@@ -76,7 +76,7 @@ export function BriefEditor({
 
       <div>
         <Label>Look</Label>
-        <div className="grid grid-cols-4 gap-2 md:grid-cols-8">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-9">
           {styles.presets.map((p) => {
             const l = PRESET_LOOK[p.id];
             const active = brief.stylePreset === p.id;

@@ -34,12 +34,18 @@ def _can_view(request, path):
     if not request.user.is_authenticated:
         return False
     parts = path.split("/")
-    if len(parts) < 3 or parts[0] != "videos" or not parts[1].isdigit():
+    if len(parts) < 3 or parts[0] not in ("videos", "generations") or not parts[1].isdigit():
         return False
     from apps.accounts.models import Membership
-    from apps.studio.models import Video
 
-    org_id = Video.objects.filter(pk=int(parts[1])).values_list("project__organization_id", flat=True).first()
+    if parts[0] == "generations":
+        from apps.generate.models import Generation
+
+        org_id = Generation.objects.filter(pk=int(parts[1])).values_list("organization_id", flat=True).first()
+    else:
+        from apps.studio.models import Video
+
+        org_id = Video.objects.filter(pk=int(parts[1])).values_list("project__organization_id", flat=True).first()
     return org_id is not None and Membership.objects.filter(user=request.user, organization_id=org_id).exists()
 
 

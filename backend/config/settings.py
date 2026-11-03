@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.billing",
     "apps.social",
     "apps.studio",
+    "apps.generate",
 ]
 
 MIDDLEWARE = [
@@ -146,6 +147,15 @@ IMAGE_PROVIDER = env("IMAGE_PROVIDER", "fake")  # fake | fal
 VIDEO_PROVIDER = env("VIDEO_PROVIDER", "fake")  # fake | fal
 TTS_PROVIDER = env("TTS_PROVIDER", "fake")  # fake | fal
 
+for _name, _value, _allowed in [("LLM_PROVIDER", LLM_PROVIDER, ("fake", "openrouter")),
+                                ("IMAGE_PROVIDER", IMAGE_PROVIDER, ("fake", "fal")),
+                                ("VIDEO_PROVIDER", VIDEO_PROVIDER, ("fake", "fal")),
+                                ("TTS_PROVIDER", TTS_PROVIDER, ("fake", "fal"))]:
+    if _value not in _allowed:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(f"{_name}={_value!r} is not valid; use one of: {', '.join(_allowed)}")
+
 # The test suite must never call paid providers, whatever .env says.
 if len(sys.argv) > 1 and sys.argv[1] == "test":
     LLM_PROVIDER = IMAGE_PROVIDER = VIDEO_PROVIDER = TTS_PROVIDER = "fake"
@@ -156,6 +166,11 @@ LLM_CHAT_MODEL = env("LLM_CHAT_MODEL", "google/gemini-2.5-flash")
 LLM_STORY_MODEL = env("LLM_STORY_MODEL", "anthropic/claude-sonnet-5.5")
 
 FAL_KEY = env("FAL_KEY", "")
+# Generate page: credits are charged from fal's listed price at this rate.
+USD_PER_CREDIT = float(env("USD_PER_CREDIT", "0.05"))
+GENERATE_POLL_SECONDS = float(env("GENERATE_POLL_SECONDS", "2"))
+GENERATE_CHARGE_CREDITS = env_bool("GENERATE_CHARGE_CREDITS", False)
+VIDEO_MODEL_BEST = env("VIDEO_MODEL_BEST", "minimax/h3-max/text-to-video")
 FAL_IMAGE_MODEL = env("FAL_IMAGE_MODEL", "fal-ai/flux/schnell")
 FAL_IMAGE_REF_MODEL = env("FAL_IMAGE_REF_MODEL", "fal-ai/bytedance/seedream/v4.5/edit")
 FAL_VIDEO_MODEL_STANDARD = env("FAL_VIDEO_MODEL_STANDARD", "fal-ai/kling-video/v2.5-turbo/pro/image-to-video")

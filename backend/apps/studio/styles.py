@@ -12,6 +12,12 @@ STYLE_PRESETS = {
         "label": "2D anime",
         "guide": "2D anime style, cel shading, detailed painted backgrounds, dramatic lighting, expressive eyes",
     },
+    "anime_action": {
+        "label": "Anime action",
+        "guide": "high-energy battle anime style, sharp cel shading, glowing energy auras, speed lines, impact frames, "
+                 "dramatic low camera angles, intense expressive eyes, spiky stylized hair, vivid saturated colors, "
+                 "dust and debris, original characters",
+    },
     "cinematic": {
         "label": "Cinematic",
         "guide": "cinematic live-action film still, anamorphic lens, film grain, teal and orange color grade, "

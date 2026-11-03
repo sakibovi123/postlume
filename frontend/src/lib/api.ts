@@ -3,6 +3,10 @@ import type {
   Brief,
   ChatMessage,
   CreativeBrief,
+  FalModel,
+  FalModelInfo,
+  GenCategory,
+  Generation,
   GenTask,
   Me,
   Members,
@@ -89,6 +93,22 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   return data as T;
 }
 
+export async function uploadFile(file: File): Promise<{ url: string; name: string; contentType: string }> {
+  await ensureCsrf();
+  const headers: Record<string, string> = { Accept: "application/json", "X-CSRFToken": cookie("csrftoken") };
+  const org = getActiveOrg();
+  if (org) headers["X-Org-Id"] = org;
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${BASE}/generate/upload`, { method: "POST", headers, credentials: "include", body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const { code, message } = messageFrom(data, res.status);
+    throw new ApiError(res.status, code, message, data);
+  }
+  return data;
+}
+
 export function notifyCredits() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event("taleloop:credits"));
 }
@@ -130,6 +150,14 @@ export const api = {
   restoreStory: (id: number) => request<Story>("POST", `/stories/${id}/restore`),
   startRender: (id: number, body: { tier: Tier; aspectRatio?: string; voiceId?: string; musicMood?: string; captions?: boolean }) =>
     request<Video>("POST", `/stories/${id}/videos`, body),
+
+  genCategories: () => request<{ categories: GenCategory[]; configured: boolean; usdPerCredit: number; chargeCredits: boolean; bestVideoModel: string }>("GET", "/generate/categories"),
+  genModels: (category: string) => request<FalModel[]>("GET", `/generate/models?category=${encodeURIComponent(category)}`),
+  genSchema: (endpoint: string) => request<FalModelInfo>("GET", `/generate/schema?endpoint=${encodeURIComponent(endpoint)}`),
+  generations: () => request<Generation[]>("GET", "/generations"),
+  generate: (body: { endpointId: string; modelName: string; category: string; input: Record<string, unknown>; totalSeconds?: number }) =>
+    request<Generation>("POST", "/generations", body),
+  deleteGeneration: (id: number) => request("DELETE", `/generations/${id}`),
 
   videos: (params: Record<string, string> = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
