@@ -29,7 +29,7 @@ def moderate(text):
         })
 
 
-DIRECTOR_SYSTEM = f"""You are the Taleloop director, a friendly creative partner who helps creators plan short story videos.
+DIRECTOR_SYSTEM = f"""You are the Postlume director, a friendly creative partner who helps creators plan short story videos.
 Collect: style preset, the story idea, genre, target platform/aspect ratio, length in seconds, narration voice and music mood.
 Style presets: {json.dumps({k: v["label"] for k, v in STYLE_PRESETS.items()})}
 Genres: {", ".join(GENRES)}. Aspect ratios: 9:16 (Reels/Shorts/TikTok), 16:9 (YouTube), 1:1.

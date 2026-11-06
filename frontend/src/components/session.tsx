@@ -62,8 +62,8 @@ export function SessionProvider({ children, fallback }: { children: ReactNode; f
     refresh();
     refreshCredits();
     const onCredits = () => refreshCredits();
-    window.addEventListener("taleloop:credits", onCredits);
-    return () => window.removeEventListener("taleloop:credits", onCredits);
+    window.addEventListener("postlume:credits", onCredits);
+    return () => window.removeEventListener("postlume:credits", onCredits);
   }, [refresh, refreshCredits]);
 
   const switchOrg = useCallback(

@@ -55,7 +55,7 @@ def end_card_png(title, w, h, dest):
         lw = draw.textlength(line, font=font)
         draw.text(((w - lw) / 2, y), line, font=font, fill=(255, 255, 255))
         y += min(w, h) * 0.09
-    tag = "Made with Taleloop"
+    tag = "Made with Postlume"
     draw.text(((w - draw.textlength(tag, font=small)) / 2, y + 30), tag, font=small, fill=(255, 122, 107))
     img.save(dest)
     return dest
@@ -156,7 +156,7 @@ def render(video, on_progress=lambda f: None):
     joined = work / "joined.mp4"
     run_ffmpeg(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(joined)])
 
-    final = base / f"taleloop_{video.id}_{secrets.token_hex(3)}.mp4"
+    final = base / f"postlume_{video.id}_{secrets.token_hex(3)}.mp4"
     music = find_music(video.music_mood)
     if music:
         run_ffmpeg([
@@ -173,7 +173,8 @@ def render(video, on_progress=lambda f: None):
 
     thumb = base / f"thumb_{secrets.token_hex(3)}.jpg"
     run_ffmpeg(["-ss", "0.8", "-i", str(final), "-frames:v", "1", "-q:v", "3", str(thumb)])
-    for old in base.glob("taleloop_*.mp4"):
+    # taleloop_ is the filename prefix of renders made before the rename to Postlume.
+    for old in [*base.glob("postlume_*.mp4"), *base.glob("taleloop_*.mp4")]:
         if old != final:
             old.unlink(missing_ok=True)
     for old in base.glob("thumb_*.jpg"):

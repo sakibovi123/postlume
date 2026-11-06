@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -57,6 +58,13 @@ class CsrfView(APIView):
         return Response({"ok": True})
 
 
+class SignupStatusView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"enabled": settings.SIGNUP_ENABLED})
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -64,6 +72,10 @@ class RegisterView(APIView):
         s = RegisterSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         email = s.validated_data["email"].lower()
+        if not settings.SIGNUP_ENABLED and not Invitation.objects.filter(
+            token=s.validated_data.get("inviteToken") or "", email=email, accepted_at__isnull=True
+        ).exists():
+            raise PermissionDenied("Sign-ups are closed. You need an invitation sent to this email address.")
         if User.objects.filter(username=email).exists():
             raise ValidationError({"email": "An account with this email already exists."})
         try:

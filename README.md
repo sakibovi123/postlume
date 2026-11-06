@@ -1,4 +1,4 @@
-# Taleloop
+# Postlume
 
 AI content studio: chat with an AI director, approve a story, and render it into a finished video.
 Phase 1 per [requirements.md](requirements.md), with a Django backend and a Next.js frontend.
@@ -20,7 +20,7 @@ Needs Python 3.12+, [uv](https://docs.astral.sh/uv/), Node 20+ and pnpm. FFmpeg 
 ./dev.sh        # Django :8000 + render worker + Next.js :8020  (PORT=8021 ./dev.sh to change)
 ```
 
-Open http://localhost:8020, sign up, and make a video. By default every provider is `fake`, so the whole
+Sign-ups are off by default, so for a new local account add `SIGNUP_ENABLED=true` to `backend/.env` first. Open http://localhost:8020/signup, create an account, and make a video. By default every provider is `fake`, so the whole
 pipeline (chat → brief → story → scenes → keyframes → voice → captions → MP4) runs offline for $0 with
 placeholder images and silent narration.
 

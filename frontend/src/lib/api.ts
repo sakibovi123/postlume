@@ -32,7 +32,7 @@ export class ApiError extends Error {
 }
 
 const BASE = "/api/v1";
-const ORG_KEY = "taleloop.orgId";
+const ORG_KEY = "postlume.orgId";
 
 function cookie(name: string) {
   if (typeof document === "undefined") return "";
@@ -110,12 +110,13 @@ export async function uploadFile(file: File): Promise<{ url: string; name: strin
 }
 
 export function notifyCredits() {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("taleloop:credits"));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("postlume:credits"));
 }
 
 export const api = {
   me: () => request<Me>("GET", "/auth/me"),
   login: (email: string, password: string) => request<Me>("POST", "/auth/login", { email, password }),
+  signupStatus: () => request<{ enabled: boolean }>("GET", "/auth/signup-status"),
   register: (body: { email: string; password: string; name?: string; organizationName?: string; inviteToken?: string }) =>
     request<Me>("POST", "/auth/register", body),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),

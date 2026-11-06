@@ -12,6 +12,7 @@ from . import views
 api = [
     path("health", views.health),
     path("auth/csrf", acc.CsrfView.as_view()),
+    path("auth/signup-status", acc.SignupStatusView.as_view()),
     path("auth/register", acc.RegisterView.as_view()),
     path("auth/login", acc.LoginView.as_view()),
     path("auth/logout", acc.LogoutView.as_view()),

@@ -2,32 +2,53 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { Button, Card, ErrorText, Input, Label } from "@/components/ui";
+import { Button, Card, ErrorText, Input, Label, PageLoading } from "@/components/ui";
 import { api, setActiveOrg } from "@/lib/api";
 
 export default function SignupPage() {
   const router = useRouter();
+  const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", organizationName: "" });
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
+
+  useEffect(() => {
+    const invited = window.sessionStorage.getItem("postlume.invite");
+    (invited ? Promise.resolve(true) : api.signupStatus().then((s) => s.enabled)).then(setAllowed).catch(() => setAllowed(false));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      const invite = typeof window !== "undefined" ? window.sessionStorage.getItem("taleloop.invite") : null;
+      const invite = typeof window !== "undefined" ? window.sessionStorage.getItem("postlume.invite") : null;
       const me = await api.register({ ...form, inviteToken: invite ?? undefined });
-      window.sessionStorage.removeItem("taleloop.invite");
+      window.sessionStorage.removeItem("postlume.invite");
       setActiveOrg(me.activeOrganization?.id ?? null);
       router.replace(invite ? "/studio" : "/onboarding");
     } catch (err) {
       setError(err);
       setLoading(false);
     }
+  }
+
+  if (allowed === null) return <PageLoading />;
+  if (!allowed) {
+    return (
+      <Card className="space-y-3 text-center">
+        <h1 className="text-xl font-semibold">Sign-ups are closed</h1>
+        <p className="text-sm text-mute">Postlume is invite-only right now. If you have an invitation, open its link to create your account.</p>
+        <p className="text-sm">
+          <Link href="/login" className="text-accent hover:underline">
+            Log in
+          </Link>
+        </p>
+      </Card>
+    );
   }
 
   return (

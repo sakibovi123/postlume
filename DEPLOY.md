@@ -1,4 +1,4 @@
-# Deploying Taleloop to Railway
+# Deploying Postlume to Railway
 
 Two services from this one repo:
 
@@ -42,9 +42,10 @@ LLM_PROVIDER=fake
 IMAGE_PROVIDER=fake
 VIDEO_PROVIDER=fake
 TTS_PROVIDER=fake
+SIGNUP_ENABLED=true
 ```
 
-Generate the secret with `python3 -c "import secrets; print(secrets.token_urlsafe(50))"`.
+`SIGNUP_ENABLED=true` is only there so you can create your own account (step 4). Generate the secret with `python3 -c "import secrets; print(secrets.token_urlsafe(50))"`.
 
 That's enough to boot. Everything else in [`backend/.env.example`](backend/.env.example) is optional:
 
@@ -71,7 +72,8 @@ on the frontend, then redeploy it. The value is read at build time.
 Deploy both services (backend first is nicer, but the order doesn't matter). Then:
 
 - `https://<frontend-domain>/api/v1/health` → `{"ok": true}`
-- Open `https://<frontend-domain>`, sign up, and make a video. With the fake providers it renders in seconds.
+- Open `https://<frontend-domain>/signup`, create your account, and make a video. With the fake providers it renders in seconds.
+- **Close sign-ups:** delete `SIGNUP_ENABLED` from the backend variables and redeploy. From then on, only people you invite from the Team page can create an account.
 
 ## OAuth redirect URIs (when you add social keys)
 
@@ -95,4 +97,5 @@ backend's, so this only works with Postgres (`DATABASE_URL`), not the SQLite vol
 | Frontend pages load but API calls return 500 or "Failed to proxy" | The backend isn't named `backend`, or it isn't running. Set `API_ORIGIN` on the frontend and redeploy it. |
 | `CSRF Failed: Origin checking failed` | `PUBLIC_APP_URL` on the backend must be the frontend's public URL. Redeploy the backend after changing it. |
 | Users or videos disappear after a deploy | Attach the volume at `/data` on the backend. |
+| `/signup` says sign-ups are closed | Set `SIGNUP_ENABLED=true` on the backend while you create an account, then remove it. Invited people don't need this. |
 | Django admin | Not exposed through the frontend. Generate a backend domain temporarily and open `/admin/` there (`python manage.py createsuperuser` from the Railway shell). |

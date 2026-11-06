@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -11,10 +12,11 @@ from apps.billing.models import Subscription, UsageLedger
 from apps.studio.models import RenderJob, Video
 from pipeline import jobs
 
-TMP_MEDIA = tempfile.mkdtemp(prefix="taleloop-test-")
+User = get_user_model()
+TMP_MEDIA = tempfile.mkdtemp(prefix="postlume-test-")
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
+@override_settings(SIGNUP_ENABLED=True, MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
 class FlowTests(TestCase):
     @classmethod
     def tearDownClass(cls):
@@ -151,7 +153,7 @@ class FlowTests(TestCase):
         self.assertIn("not+configured", r["Location"])
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
+@override_settings(SIGNUP_ENABLED=True, MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
 class MediaAndHealthTests(TestCase):
     def test_health(self):
         self.assertEqual(APIClient().get("/api/v1/health").json(), {"ok": True})
@@ -195,7 +197,7 @@ class PartialJsonTests(TestCase):
         self.assertEqual(parse_partial('{"a": [{"name": "As'), {"a": [{"name": "As"}]})
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
+@override_settings(SIGNUP_ENABLED=True, MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
 class TaskProgressTests(TestCase):
     def test_story_task_reports_streamed_stages(self):
         c = APIClient()
@@ -221,3 +223,51 @@ class TaskProgressTests(TestCase):
         self.assertEqual(task["partial"]["title"], task["result"]["title"])
         self.assertEqual([s["id"] for s in task["stages"]][:2], ["brief", "title"])
         self.assertEqual(c.get(f"/api/v1/projects/{p['id']}").json()["tasks"], [])
+
+
+@override_settings(SIGNUP_ENABLED=False)
+class SignupClosedTests(TestCase):
+    CREDS = {"email": "new@example.com", "password": "s3cret-pass!"}
+
+    def register(self, **extra):
+        return APIClient().post("/api/v1/auth/register", {**self.CREDS, **extra}, format="json")
+
+    def invite(self, email="new@example.com"):
+        owner = APIClient()
+        with override_settings(SIGNUP_ENABLED=True):
+            owner.post("/api/v1/auth/register", {"email": "owner@example.com", "password": "s3cret-pass!"}, format="json")
+        return owner.post("/api/v1/orgs/current/invitations", {"email": email, "role": "creator"}, format="json").json()["token"]
+
+    def test_status_reports_closed(self):
+        self.assertEqual(APIClient().get("/api/v1/auth/signup-status").json(), {"enabled": False})
+
+    def test_open_signup_is_rejected(self):
+        self.assertEqual(self.register().status_code, 403)
+        self.assertFalse(User.objects.filter(username="new@example.com").exists())
+
+    def test_invalid_or_mismatched_invite_is_rejected(self):
+        self.assertEqual(self.register(inviteToken="nope").status_code, 403)
+        self.assertEqual(self.register(inviteToken=self.invite("other@example.com")).status_code, 403)
+        self.assertFalse(User.objects.filter(username="new@example.com").exists())
+
+    def test_invited_person_joins_the_inviting_org(self):
+        r = self.register(inviteToken=self.invite())
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(len(r.json()["organizations"]), 1)
+        self.assertEqual(r.json()["activeOrganization"]["role"], "creator")
+
+    def test_invite_cannot_be_reused(self):
+        token = self.invite()
+        self.assertEqual(self.register(inviteToken=token).status_code, 201)
+        r = APIClient().post("/api/v1/auth/register", {"email": "new@example.com", "password": "s3cret-pass!", "inviteToken": token}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_existing_accounts_can_still_log_in(self):
+        User.objects.create_user(username="old@example.com", email="old@example.com", password="s3cret-pass!")
+        r = APIClient().post("/api/v1/auth/login", {"email": "old@example.com", "password": "s3cret-pass!"}, format="json")
+        self.assertEqual(r.status_code, 200)
+
+    @override_settings(SIGNUP_ENABLED=True)
+    def test_flag_reopens_signup(self):
+        self.assertEqual(APIClient().get("/api/v1/auth/signup-status").json(), {"enabled": True})
+        self.assertEqual(self.register().status_code, 201)

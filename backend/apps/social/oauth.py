@@ -111,7 +111,7 @@ def _facebook(http, c, code):
         "fields": "id,name,access_token,picture{url}", "access_token": long["access_token"],
     }))
     if not pages.get("data"):
-        raise OAuthError("No Facebook Pages found. Taleloop can only post to Pages you manage.")
+        raise OAuthError("No Facebook Pages found. Postlume can only post to Pages you manage.")
     return [
         {
             "external_id": p["id"], "handle": p["name"], "display_name": p["name"],

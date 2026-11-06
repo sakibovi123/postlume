@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from apps.billing.models import Subscription
 from apps.generate import fal_api
 
-TMP_MEDIA = tempfile.mkdtemp(prefix="taleloop-gen-test-")
+TMP_MEDIA = tempfile.mkdtemp(prefix="postlume-gen-test-")
 
 OPENAPI = {
     "info": {"x-fal-metadata": {"category": "text-to-video"}},
@@ -37,7 +37,7 @@ class FakeStatus:
         self.logs, self.position = logs or [], position
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAL_KEY="test", GENERATE_POLL_SECONDS=0, USD_PER_CREDIT=0.05,
+@override_settings(SIGNUP_ENABLED=True, MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAL_KEY="test", GENERATE_POLL_SECONDS=0, USD_PER_CREDIT=0.05,
                    GENERATE_CHARGE_CREDITS=True)
 class GenerateTests(TestCase):
     @classmethod

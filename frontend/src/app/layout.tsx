@@ -6,7 +6,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Taleloop",
+  title: "Postlume",
   description: "Chat with an AI director, get a story, turn it into a finished video.",
 };
 

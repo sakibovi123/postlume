@@ -19,7 +19,7 @@ from providers.media import download, ffmpeg_bin, public_url, run_ffmpeg
 from . import shots as shot_planner
 from .models import Generation
 
-log = logging.getLogger("taleloop.generate")
+log = logging.getLogger("postlume.generate")
 _active = set()
 _lock = threading.Lock()
 MEDIA_EXT = {".mp4": "video", ".webm": "video", ".mov": "video", ".png": "image", ".jpg": "image", ".jpeg": "image",

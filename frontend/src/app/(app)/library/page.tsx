@@ -32,7 +32,7 @@ export default function Library() {
     };
   }, [filters]);
 
-  const set = (k: keyof typeof filters) => (e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, [k]: e.target.value });
+  const set = (k: keyof typeof filters) => (e: { target: { value: string } }) => setFilters({ ...filters, [k]: e.target.value });
 
   return (
     <div className="max-w-7xl">

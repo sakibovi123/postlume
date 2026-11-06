@@ -459,7 +459,7 @@ class DownloadView(APIView):
         path = local_path(v.output_url) if v.output_url else None
         if not path or not path.exists():
             raise NotFound("The video file isn't ready.")
-        safe = "".join(c if c.isalnum() else "_" for c in v.story.title)[:60] or "taleloop"
+        safe = "".join(c if c.isalnum() else "_" for c in v.story.title)[:60] or "postlume"
         return FileResponse(open(path, "rb"), as_attachment=True, filename=f"{safe}.mp4")
 
 

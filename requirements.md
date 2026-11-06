@@ -1,4 +1,4 @@
-# Taleloop — Requirements & Phase 1 Plan
+# Postlume — Requirements & Phase 1 Plan
 
 > AI content studio: connect Instagram, Facebook and YouTube, chat with an AI to pick a video style (or write your own prompt), get a strong story, and turn that story into a finished video. Publishing and scheduling come in Phase 2.
 

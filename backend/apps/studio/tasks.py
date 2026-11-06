@@ -15,7 +15,7 @@ from providers.base import ProviderError
 from .models import GenerationTask
 from .partial_json import parse_partial
 
-log = logging.getLogger("taleloop.tasks")
+log = logging.getLogger("postlume.tasks")
 STALE_AFTER = timedelta(minutes=10)
 WORDS_PER_SECOND = 2.6
 

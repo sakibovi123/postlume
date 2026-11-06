@@ -23,7 +23,7 @@ export default function AcceptInvite() {
       .then(() => router.replace("/studio"))
       .catch((e) => {
         if (e instanceof ApiError && e.status === 403) {
-          window.sessionStorage.setItem("taleloop.invite", token);
+          window.sessionStorage.setItem("postlume.invite", token);
           router.replace("/signup");
         } else setError(e);
       });

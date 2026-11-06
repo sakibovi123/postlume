@@ -62,7 +62,7 @@ class OpenRouterLlm:
         return {
             "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
             "HTTP-Referer": settings.PUBLIC_APP_URL,
-            "X-Title": "Taleloop",
+            "X-Title": "Postlume",
         }
 
     def _stream(self, model, messages, schema, on_text):

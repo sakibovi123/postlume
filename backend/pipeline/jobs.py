@@ -12,7 +12,7 @@ from apps.studio.models import RenderJob, Video, VideoStatus
 
 from .steps import STEPS
 
-log = logging.getLogger("taleloop.worker")
+log = logging.getLogger("postlume.worker")
 MAX_ATTEMPTS = 3
 ORDER = RenderJob.STEPS
 
