@@ -55,6 +55,17 @@ def run(job):
         if job.chain and job.step != "assembling":
             nxt = ORDER[ORDER.index(job.step) + 1]
             enqueue(video, nxt, scene=job.scene, chain=True, charge_key=job.charge_key)
+    if job.step == "assembling":
+        _finished(video.pk, job.charge_key, ok=True)
+
+
+def _finished(video_id, charge_key, ok, error=""):
+    from apps.studio import services
+
+    try:
+        services.on_render_finished(video_id, charge_key or "", ok, error)
+    except Exception:
+        log.exception("post-render hook failed for video %s", video_id)
 
 
 def _failed(job, video, exc):
@@ -73,6 +84,7 @@ def _failed(job, video, exc):
 
     entry = UsageLedger.objects.filter(idempotency_key=job.charge_key).first() if job.charge_key else None
     billing.refund(entry, note=f"Refund: {job.step} failed")
+    _finished(video.pk, job.charge_key, ok=False, error=str(exc))
 
 
 def retry(video, charge_key=""):

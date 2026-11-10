@@ -10,6 +10,9 @@ class Project(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     title = models.CharField(max_length=200, default="Untitled project")
     style_preset = models.CharField(max_length=32, blank=True)
+    series = models.JSONField(default=dict, blank=True)  # {title, logline, premise, episodeCount, episodeSeconds}
+    render_mode = models.CharField(max_length=16, blank=True)  # all | one_by_one
+    render_tier = models.CharField(max_length=16, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -17,7 +20,7 @@ class Project(models.Model):
 class ChatMessage(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="messages")
     role = models.CharField(max_length=16)  # user | assistant
-    content = models.JSONField()  # {"text": str, "brief": dict | None}
+    content = models.JSONField()  # {"text", "brief", "actions", "suggestions"}
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -44,6 +47,8 @@ class Story(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="stories")
     brief = models.ForeignKey(Brief, on_delete=models.PROTECT, related_name="stories")
     version = models.IntegerField()
+    episode = models.IntegerField(default=1)
+    synopsis = models.TextField(blank=True)
     title = models.CharField(max_length=200)
     logline = models.TextField()
     hook = models.TextField()
@@ -60,6 +65,7 @@ class Story(models.Model):
 
 
 class VideoStatus(models.TextChoices):
+    WAITING = "waiting"
     QUEUED = "queued"
     PLANNING = "planning"
     REFERENCES = "references"
@@ -110,11 +116,19 @@ class Scene(models.Model):
     clip_url = models.CharField(max_length=1000, blank=True)
     audio_url = models.CharField(max_length=1000, blank=True)
     words = models.JSONField(default=list)  # [{"word", "start", "end"}] in seconds, relative to the scene
+    trim_start_ms = models.IntegerField(default=0)
+    trim_end_ms = models.IntegerField(default=0)
+    sfx_prompt = models.CharField(max_length=300, blank=True)
+    sfx_url = models.CharField(max_length=1000, blank=True)
     status = models.CharField(max_length=16, default="pending")
 
     class Meta:
         ordering = ["idx"]
         unique_together = ("video", "idx")
+
+    @property
+    def effective_ms(self):
+        return max(500, self.duration_ms - self.trim_start_ms - self.trim_end_ms)
 
 
 class RenderJob(models.Model):
@@ -140,7 +154,7 @@ class RenderJob(models.Model):
 
 class GenerationTask(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="tasks")
-    kind = models.CharField(max_length=16)  # director | story | rewrite
+    kind = models.CharField(max_length=16)  # director | story | rewrite | agent | series
     status = models.CharField(max_length=16, default="queued")  # queued | running | done | failed
     stage = models.CharField(max_length=32, blank=True)
     progress = models.IntegerField(default=0)

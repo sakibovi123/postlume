@@ -90,3 +90,20 @@ class FalTts:
         except ProviderError as e:
             log.warning("word timestamps failed, using even spacing: %s", e)
         return even_word_timings(text, duration)
+
+
+class FalSfx:
+    name = "fal"
+
+    def generate(self, description, seconds, dest):
+        out = _subscribe(settings.FAL_SFX_MODEL, {"text": description[:450],
+                                                  "duration_seconds": round(min(22, max(0.5, seconds)), 1)})
+        audio = out.get("audio") or {}
+        url = audio.get("url") if isinstance(audio, dict) else None
+        if not url:
+            raise ProviderError("The sound effect model returned no audio.")
+        raw = Path(dest).with_suffix(".src")
+        download(url, raw)
+        to_wav(raw, dest)
+        raw.unlink(missing_ok=True)
+        return Path(dest), COST["sfx"]

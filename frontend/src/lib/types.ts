@@ -43,12 +43,36 @@ export interface Brief extends CreativeBrief {
   createdAt: string;
 }
 
+export interface AgentAction {
+  type: "plan" | "writing" | "rewrite" | "render" | "edit";
+  label: string;
+  episodes?: number[];
+  episode?: number;
+  videoId?: number;
+  taskId?: number;
+}
+
 export interface ChatMessage {
   id: number;
   role: "user" | "assistant";
   text: string;
   brief: CreativeBrief | null;
+  actions: AgentAction[];
+  suggestions: string[];
   createdAt: string;
+}
+
+export interface EpisodeOutline {
+  title: string;
+  synopsis: string;
+}
+
+export interface Series {
+  title: string;
+  premise: string;
+  episodeCount: number;
+  episodeSeconds: number;
+  outline?: { title: string; logline: string; characters: Character[]; episodes: EpisodeOutline[] };
 }
 
 export interface Character {
@@ -62,6 +86,8 @@ export interface Story {
   projectId: number;
   briefId: number;
   version: number;
+  episode: number;
+  synopsis: string;
   title: string;
   logline: string;
   hook: string;
@@ -74,6 +100,7 @@ export interface Story {
 }
 
 export type VideoStatus =
+  | "waiting"
   | "queued"
   | "planning"
   | "references"
@@ -99,6 +126,11 @@ export interface Scene {
   clipUrl: string;
   audioUrl: string;
   status: string;
+  trimStartMs: number;
+  trimEndMs: number;
+  effectiveMs: number;
+  sfxPrompt: string;
+  sfxUrl: string;
 }
 
 export interface Video {
@@ -107,6 +139,7 @@ export interface Video {
   storyId: number;
   storyVersion: number;
   title: string;
+  episode: number;
   tier: Tier;
   aspectRatio: AspectRatio;
   stylePreset: StylePreset;
@@ -133,12 +166,14 @@ export interface ProjectSummary {
   createdAt: string;
   updatedAt: string;
   latestVideo: { id: number; status: VideoStatus; thumbnailUrl: string } | null;
+  series: Series | null;
+  renderMode: "all" | "one_by_one" | "";
 }
 
 export interface GenTask {
   id: number;
   projectId: number;
-  kind: "director" | "story" | "rewrite";
+  kind: "director" | "story" | "rewrite" | "agent" | "series";
   status: "queued" | "running" | "done" | "failed";
   stage: string;
   progress: number;

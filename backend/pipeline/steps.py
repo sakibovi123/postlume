@@ -49,6 +49,9 @@ def references(video, scene=None):
         return 0.0
     refs = dict(video.references or {})
     chars = refs.setdefault("characters", {})
+    for other in Video.objects.filter(project=video.project).exclude(pk=video.pk).order_by("-id"):
+        for name, ref in ((other.references or {}).get("characters") or {}).items():
+            chars.setdefault(name, ref)
     out_dir = video_dir(video.id) / "refs"
     out_dir.mkdir(exist_ok=True)
     cost = 0.0

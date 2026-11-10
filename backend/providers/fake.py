@@ -13,7 +13,7 @@ import json
 from django.conf import settings
 from PIL import Image, ImageDraw, ImageFont
 
-from apps.studio.schemas import CreativeBrief, DirectorReply, ScenePlan, StoryOut
+from apps.studio.schemas import CreativeBrief, DirectorReply, ScenePlan, SeriesOutline, StoryOut
 
 from .base import ImageResult, TtsResult, VideoResult, even_word_timings
 
@@ -41,6 +41,11 @@ class FakeLlm:
             out = self._director(messages, hint)
         elif schema is StoryOut:
             out = self._story(hint)
+            if hint.get("episode"):
+                out.title = f"Episode {hint['episode']}: {hint['brief']['idea'].split(':')[0]}"[:200]
+                out.characters = hint["characters"]
+        elif schema is SeriesOutline:
+            out = self._series(hint)
         elif schema is ScenePlan:
             out = self._scenes(hint)
         elif "shotCount" in hint:
@@ -59,6 +64,25 @@ class FakeLlm:
             on_text(text[:i])
             if pause:
                 time.sleep(pause)
+
+    def _series(self, hint):
+        series, brief = hint["series"], hint["brief"]
+        beats = ["The first sign", "Something follows", "The locked room", "Old letters", "No way out",
+                 "The truth surfaces", "Turning the tables", "The last night", "Into the dark", "Dawn"]
+        episodes = [{"title": beats[i % len(beats)] + (f" ({i // len(beats) + 1})" if i >= len(beats) else ""),
+                     "synopsis": f"Part {i + 1} of the story: {brief['idea'][:160]}"}
+                    for i in range(series["episodeCount"])]
+        return SeriesOutline(
+            title=series.get("title") or "Untitled series", logline=f"A {brief['genre']} series: {brief['idea'][:150]}",
+            characters=[{"name": "Mira", "role": "protagonist",
+                         "visualDescription": "10-year-old girl, curly dark hair, yellow raincoat, red boots"},
+                        {"name": "Pip", "role": "sidekick",
+                         "visualDescription": "tiny round glowing blue creature with big eyes and stubby arms"}],
+            episodes=episodes,
+        )
+
+    def agent(self, system, messages, tools, state=None):
+        return FakeAgent(messages, state or {}).turn(), 0.0
 
     def _director(self, messages, hint):
         text = " ".join(m["content"] for m in messages if m["role"] == "user").lower()
@@ -161,6 +185,151 @@ class FakeLlm:
         return ScenePlan(styleGuide=guide, scenes=scenes)
 
 
+def _num(pattern, text, default=None, cast=int):
+    m = re.search(pattern, text)
+    return cast(m.group(1)) if m else default
+
+
+class FakeAgent:
+    """Rule-based stand-in for the tool-calling assistant, so the studio works offline and in tests."""
+
+    def __init__(self, messages, state):
+        self.messages, self.state = messages, state
+        last = max((i for i, m in enumerate(messages) if m["role"] == "user"), default=-1)
+        self.text = (messages[last]["content"] if last >= 0 else "").lower()
+        self.results = [json.loads(m["content"]) for m in messages[last + 1:] if m["role"] == "tool"]
+        self.all_user = " ".join(m["content"] for m in messages if m["role"] == "user").lower()
+
+    def reply(self, text, suggestions=()):
+        if suggestions:
+            text += f"\n[[suggestions: {' | '.join(suggestions)}]]"
+        return {"content": text, "tool_calls": [], "raw": {"role": "assistant", "content": text}}
+
+    def calls(self, *calls):
+        items = [{"id": f"call_{i}_{random.randint(0, 1 << 30)}", "name": n, "arguments": a} for i, (n, a) in enumerate(calls)]
+        raw = {"role": "assistant", "content": "", "tool_calls": [
+            {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": json.dumps(c["arguments"])}}
+            for c in items]}
+        return {"content": "", "tool_calls": items, "raw": raw}
+
+    def turn(self):
+        if self.results:
+            errors = [r["error"] for r in self.results if not r.get("ok")]
+            if errors:
+                return self.reply(f"I hit a problem: {errors[0]}", ["Try something else"])
+            return self.reply(self.summary(), self.next_suggestions())
+        st, t = self.state, self.text
+        if not st.get("series"):
+            return self.plan()
+        if st.get("writingInProgress"):
+            return self.reply("I'm still writing the episodes. I'll post here as soon as they're done.")
+        episodes = st.get("episodes") or []
+        has_video = any(e.get("video") for e in episodes)
+        ep = _num(r"episode\s*(\d+)", t)
+        if "rewrite" in t and ep:
+            return self.calls(("rewrite_episode", {"episode": ep, "instruction": t}))
+        if "retry" in t and ep:
+            return self.calls(("retry_episode", {"episode": ep}))
+        wants_render = any(w in t for w in ["yes", "start", "make", "render", "go ahead", "sure", "next", "rest",
+                                            "one at a time", "all at once"])
+        if wants_render and not _num(r"scene\s*(\d+)", t):
+            mode = "one_by_one" if any(w in t for w in ["one at a time", "one by one", "next", "start episode"]) else (
+                "all" if any(w in t for w in ["all", "rest", "every"]) or len(episodes) == 1 else None)
+            if mode is None:
+                return self.reply("Great! Should I make all episodes at once, or one at a time so you can review "
+                                  "each before the next?", ["All at once", "One at a time"])
+            args = {"mode": mode, "tier": "lite"}
+            if ep and "start episode" in t:
+                args["episodes"] = [ep]
+            return self.calls(("render_episodes", args))
+        if not has_video:
+            return self.reply("The episodes are written. Want me to start making the videos?",
+                              ["Yes, make all episodes", "One at a time"])
+        return self.edit(ep)
+
+    def plan(self):
+        t = self.all_user
+        count = _num(r"(\d+)\s*-?\s*(?:episodes?|parts?)", t)
+        if count is None and any(w in t for w in ["single video", "one video", "a video"]):
+            count = 1
+        seconds = _num(r"(\d+)\s*(?:s\b|sec|second)", t)
+        minutes = _num(r"(\d+)\s*(?:min|minute)", t)
+        seconds = seconds or (minutes * 60 if minutes else None)
+        if count is None or seconds is None:
+            missing = [w for w, v in [("how many episodes", count), ("how long each episode should be", seconds)] if v is None]
+            return self.reply(f"Love it. Before I write: {' and '.join(missing)}?",
+                              ["5 episodes, 60 seconds each", "10 episodes, 30 seconds each", "1 video, 60 seconds"])
+        genre = next((g for g in ["horror", "kids", "sci-fi", "comedy", "mystery", "history", "motivational"] if g in t), "fantasy")
+        preset = next((p for p, words in PRESET_WORDS.items() if any(w in t for w in words)), "cinematic")
+        idea = next((m["content"] for m in self.messages if m["role"] == "user"), "An original story")
+        plan = {"title": f"The {genre.title()} Tapes" if genre != "fantasy" else "The Humming Lighthouse",
+                "premise": idea[:400], "episodeCount": max(1, min(20, count)),
+                "episodeSeconds": max(15, min(180, seconds)), "genre": genre, "stylePreset": preset,
+                "aspectRatio": "16:9" if "youtube" in t or "landscape" in t else "9:16", "voiceId": "am_fenrir"
+                if genre == "horror" else "af_heart", "musicMood": "dark" if genre == "horror" else "calm"}
+        return self.calls(("plan_series", plan), ("write_episodes", {}))
+
+    def edit(self, ep):
+        t, st = self.text, self.state
+        ready = [e for e in st.get("episodes") or [] if (e.get("video") or {}).get("scenes")]
+        if not ready:
+            return self.reply("The videos are still rendering. I'll let you know when they're ready.")
+        ep = ep or ready[-1]["episode"]
+        scene = _num(r"scene\s*(\d+)", t)
+        voices = ["af_heart", "am_michael", "am_fenrir", "af_bella", "bf_emma", "bm_george"]
+        if "voice" in t:
+            current = (ready[-1]["video"] or {}).get("voice")
+            return self.calls(("set_audio", {"voiceId": next(v for v in voices if v != current)}))
+        mood = next((m for m in ["calm", "uplifting", "suspense", "dark", "playful", "epic", "none"] if m in t), None)
+        if "music" in t:
+            return self.calls(("set_audio", {"musicMood": mood or "suspense"}))
+        if "caption" in t and scene is None:
+            return self.calls(("set_audio", {"captions": not any(w in t for w in ["off", "remove", "hide", "no "])}))
+        if any(w in t for w in ["add a scene", "add scene", "new scene", "insert", "extend"]):
+            count = len(next(e for e in ready if e["episode"] == ep)["video"]["scenes"])
+            return self.calls(("insert_scene", {"episode": ep, "position": count + 1,
+                                                "narration": "And then, in the silence, something answered back.",
+                                                "imagePrompt": "dark hallway, a door slowly opening, moonlight"}))
+        if scene is None:
+            return self.reply("Tell me which scene to change, e.g. \"cut 2 seconds from scene 3 of episode 1\".",
+                              ["Delete scene 1", "Change the music"])
+        if any(w in t for w in ["sound", "sfx", "effect"]):
+            return self.calls(("add_sound_effect", {"episode": ep, "scene": scene, "description": t[:200]}))
+        if any(w in t for w in ["delete", "remove", "drop"]):
+            return self.calls(("delete_scene", {"episode": ep, "scene": scene}))
+        if "move" in t:
+            pos = 1 if "start" in t or "beginning" in t else _num(r"to\s*(?:position\s*)?(\d+)", t, 1)
+            return self.calls(("move_scene", {"episode": ep, "scene": scene, "position": pos}))
+        if any(w in t for w in ["trim", "cut", "shorten"]):
+            secs = _num(r"(\d+(?:\.\d+)?)\s*(?:s\b|sec|second)", t, 1.0, float)
+            key = "cutStartSeconds" if any(w in t for w in ["start", "beginning"]) else "cutEndSeconds"
+            return self.calls(("trim_scene", {"episode": ep, "scene": scene, key: secs}))
+        if "caption" in t:
+            quoted = re.search(r"[\"“](.+?)[\"”]", self.messages[-1]["content"])
+            return self.calls(("edit_caption", {"episode": ep, "scene": scene,
+                                                "text": quoted.group(1) if quoted else t[:80]}))
+        return self.calls(("edit_scene", {"episode": ep, "scene": scene, "imagePrompt": f"cinematic still, {t}"}))
+
+    def summary(self):
+        r = self.results[-1]
+        if "writeCost" in r or r.get("started"):
+            n = (self.state.get("series") or {}).get("episodeCount") or len(r.get("episodes") or [])
+            return f"Plan saved. I'm writing all {n} episodes now; I'll post here when they're ready."
+        if "creditsLeft" in r:
+            eps = r["episodes"]
+            return (f"Rendering {'episode ' + str(eps[0]) if len(eps) == 1 else f'{len(eps)} episodes'} now "
+                    f"({r['creditsCharged']} credits). I'll tell you when {'it is' if len(eps) == 1 else 'they are'} ready.")
+        if "title" in r and "words" in r:
+            return f"Rewrote it: \"{r['title']}\" ({r['words']} words)."
+        return "On it. I'm applying your edit now and will let you know when the new version is ready."
+
+    def next_suggestions(self):
+        r = self.results[-1]
+        if "creditsLeft" in r:
+            return ["Change the music", "Make the voice deeper"]
+        return []
+
+
 class FakeImage:
     name = "fake-image"
 
@@ -206,6 +375,17 @@ class FakeTts:
             w.writeframes(b"\x00\x00" * int(rate * duration))
         return TtsResult(path=Path(dest), duration=duration, words=even_word_timings(text, duration - 0.4, 0.2),
                          provider=self.name)
+
+
+class FakeSfx:
+    name = "fake-sfx"
+
+    def generate(self, description, seconds, dest):
+        from .media import run_ffmpeg
+
+        run_ffmpeg(["-f", "lavfi", "-i", f"anoisesrc=d={max(0.5, seconds):.2f}:c=pink:a=0.08", "-ar", "44100",
+                    str(dest)])
+        return Path(dest), 0.0
 
 
 def _font(size):

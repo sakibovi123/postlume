@@ -32,7 +32,7 @@ export function Composer({ styles, showStyles = true }: { styles: StylesInfo; sh
     try {
       const p = await api.createProject({ stylePreset: preset });
       await api.sendMessage(p.id, text.trim(), preset);
-      router.push(`/studio/${p.id}`);
+      router.push(`/assistant/${p.id}`);
     } catch (err) {
       setError(err);
       setBusy(false);

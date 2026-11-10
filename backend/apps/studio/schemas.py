@@ -51,3 +51,15 @@ class ScenePlanItem(BaseModel):
 class ScenePlan(BaseModel):
     styleGuide: str
     scenes: list[ScenePlanItem] = Field(min_length=2, max_length=20)
+
+
+class EpisodeOutline(BaseModel):
+    title: str
+    synopsis: str
+
+
+class SeriesOutline(BaseModel):
+    title: str
+    logline: str
+    characters: list[Character] = Field(max_length=6)
+    episodes: list[EpisodeOutline] = Field(min_length=1, max_length=20)

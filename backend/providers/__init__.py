@@ -45,3 +45,14 @@ def tts():
     from .fake import FakeTts
 
     return FakeTts()
+
+
+@cache
+def sfx():
+    if settings.SFX_PROVIDER == "fal":
+        from .fal import FalSfx
+
+        return FalSfx()
+    from .fake import FakeSfx
+
+    return FakeSfx()

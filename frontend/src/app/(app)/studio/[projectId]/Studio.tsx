@@ -1,18 +1,20 @@
 "use client";
 
-import { MessageSquare, PanelLeftClose, Pencil } from "lucide-react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, MessageSquare, PanelLeftClose, Pencil } from "lucide-react";
+import Link from "next/link";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { StageStepper } from "@/components/fx";
 import { useSession } from "@/components/session";
 import { BriefEditor } from "@/components/studio/BriefEditor";
 import { ChatPanel } from "@/components/studio/ChatPanel";
+import { SeriesEmpty, SeriesPanel } from "@/components/studio/SeriesPanel";
 import { StoryEditor } from "@/components/studio/StoryEditor";
 import { StoryLive } from "@/components/studio/StoryLive";
 import { VideoPanel } from "@/components/studio/VideoPanel";
 import { Card, cx, ErrorText, Input, PageLoading } from "@/components/ui";
-import { StatusBadge } from "@/components/video-bits";
+import { isActive, StatusBadge } from "@/components/video-bits";
 import { api } from "@/lib/api";
 import type { Billing, ChatMessage, CreativeBrief, GenTask, ProjectDetail, StylesInfo, Video } from "@/lib/types";
 
@@ -23,6 +25,7 @@ export default function Studio() {
   const id = Number(projectId);
   const search = useSearchParams();
   const router = useRouter();
+  const inAssistant = usePathname().startsWith("/assistant");
   const { can } = useSession();
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
@@ -39,12 +42,16 @@ export default function Studio() {
   const [storyTask, setStoryTask] = useState<GenTask | null>(null);
   const [storyKey, setStoryKey] = useState(0);
 
+  const sendRef = useRef<(text: string) => void>(() => {});
+  const registerSend = useCallback((fn: (text: string) => void) => {
+    sendRef.current = fn;
+  }, []);
+
   const loadBilling = useCallback(() => api.billing().then(setBilling).catch(() => setBilling(null)), []);
 
   const load = useCallback(async () => {
     const p = await api.project(id);
     setProject(p);
-    setTitle(p.title);
     return p;
   }, [id]);
 
@@ -52,13 +59,14 @@ export default function Studio() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount
     Promise.all([load(), api.styles().then(setStyles), loadBilling()])
       .then(([p]) => {
+        setTitle(p.title);
         const lastBrief = [...p.messages].reverse().find((m) => m.brief)?.brief ?? null;
         setDraftBrief(lastBrief ?? (p.briefs[0] ? stripBrief(p.briefs[0]) : null));
         setVideoId((v) => v ?? p.videos[0]?.id ?? null);
-        const running = p.tasks.find((t) => t.kind !== "director") ?? null;
+        const running = p.tasks.find((t) => t.kind === "story" || t.kind === "rewrite") ?? null;
         setStoryTask(running);
         setStage(running ? "story" : p.videos.length ? "video" : p.stories.length ? "story" : "brief");
-        if (p.videos.length) setChatOpen(false);
+        if (p.videos.length && !p.series && p.briefs.length) setChatOpen(false);
       })
       .catch(setError);
   }, [load, loadBilling]);
@@ -74,6 +82,19 @@ export default function Studio() {
     setStoryKey((k) => k + 1);
   }, [load, loadBilling]);
 
+  const live = !!project && (project.tasks.length > 0 || project.videos.some((v) => isActive(v.status)));
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => {
+      load().catch(() => {});
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [live, load]);
+
+  const turnDone = useCallback(async () => {
+    await Promise.all([load(), loadBilling()]);
+  }, [load, loadBilling]);
+
   const addMessage = useCallback((m: ChatMessage) => {
     setProject((p) => (p && !p.messages.some((x) => x.id === m.id) ? { ...p, messages: [...p.messages, m] } : p));
   }, []);
@@ -85,6 +106,7 @@ export default function Studio() {
 
   if (error) return <ErrorText error={error} />;
   if (!project || !styles || !stage) return <PageLoading />;
+  const agentMode = !!project.series || project.briefs.length === 0;
 
   const stages = [
     { id: "brief", label: "Brief", enabled: true, done: project.briefs.length > 0 },
@@ -104,6 +126,15 @@ export default function Studio() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
+          {inAssistant && (
+            <Link
+              href="/assistant"
+              title="All conversations"
+              className="grid size-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-mute transition hover:text-ink"
+            >
+              <ArrowLeft className="size-4" />
+            </Link>
+          )}
           <button
             onClick={() => setChatOpen(!chatOpen)}
             className={cx(
@@ -120,14 +151,46 @@ export default function Studio() {
             <h1 className="truncate text-2xl font-semibold tracking-tight">{project.title}</h1>
           )}
           {can("creator") && !editingTitle && (
-            <button onClick={() => setEditingTitle(true)} className="text-mute hover:text-ink" title="Rename">
+            <button
+              onClick={() => {
+                setTitle(project.title);
+                setEditingTitle(true);
+              }} className="text-mute hover:text-ink" title="Rename">
               <Pencil className="size-4" />
             </button>
           )}
         </div>
-        <StageStepper steps={stages} current={stage} onSelect={(s) => setStage(s as Stage)} />
+        {!agentMode && <StageStepper steps={stages} current={stage} onSelect={(s) => setStage(s as Stage)} />}
       </div>
 
+      {agentMode && (
+        <div className={cx("grid gap-6", chatOpen && "lg:grid-cols-[400px_1fr]")}>
+          {chatOpen && (
+            <div className="animate-fade-in lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
+              <ChatPanel project={project} styles={styles} onMessage={addMessage} onTurnDone={turnDone} registerSend={registerSend} />
+            </div>
+          )}
+          <div className="min-w-0 animate-fade-up">
+            {project.series ? (
+              <SeriesPanel
+                project={project}
+                styles={styles}
+                billing={billing}
+                onVideoChange={onVideoChange}
+                onReload={turnDone}
+                onSend={(t) => {
+                  setChatOpen(true);
+                  sendRef.current(t);
+                }}
+              />
+            ) : (
+              <SeriesEmpty onSend={(t) => sendRef.current(t)} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {!agentMode && (
       <div className={cx("grid gap-6", chatOpen && "lg:grid-cols-[380px_1fr]")}>
         {chatOpen && (
           <div className="animate-fade-in lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
@@ -135,6 +198,8 @@ export default function Studio() {
               project={project}
               styles={styles}
               onMessage={addMessage}
+              onTurnDone={turnDone}
+              registerSend={registerSend}
               onUseBrief={(b) => {
                 setDraftBrief(b);
                 setBriefKey((k) => k + 1);
@@ -233,6 +298,7 @@ export default function Studio() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

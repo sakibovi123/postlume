@@ -100,6 +100,9 @@ FRIENDLY = {
     "content_policy_violation": "The model's content checker blocked this prompt. Named characters from existing "
     "shows (anime, cartoons, games) and real people are usually blocked — describe original characters instead "
     "(look, outfit, powers) and try again.",
+    "prompt_rejected": "This model refused the prompt. Google and some other providers block named characters "
+    "from movies, comics or games, real people, and violence (hitting, slapping, fighting). Describe original "
+    "characters and tone down the action, or try a different model such as Kling or MiniMax.",
 }
 
 
@@ -113,6 +116,8 @@ def _message(exc):
             detail = None
     if isinstance(detail, list) and detail and isinstance(detail[0], dict):
         kind = detail[0].get("type") or getattr(exc, "error_type", None)
+        if kind == "invalid_request" and "prompt" in (detail[0].get("loc") or []) and "different inputs" in str(detail[0].get("msg")):
+            kind = "prompt_rejected"
         text = FRIENDLY.get(kind) or detail[0].get("msg") or str(exc)
     elif isinstance(detail, str):
         text = detail

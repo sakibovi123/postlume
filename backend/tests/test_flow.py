@@ -16,6 +16,11 @@ User = get_user_model()
 TMP_MEDIA = tempfile.mkdtemp(prefix="postlume-test-")
 
 
+def brief(seconds=15, idea="A kids story about a brave snail", preset="cartoon"):
+    return {"stylePreset": preset, "idea": idea, "genre": "kids", "aspectRatio": "9:16", "targetSeconds": seconds,
+            "musicMood": "calm", "voiceId": "af_heart"}
+
+
 @override_settings(SIGNUP_ENABLED=True, MEDIA_ROOT=TMP_MEDIA, TASKS_EAGER=True, FAKE_LLM_STREAM_SECONDS=0)
 class FlowTests(TestCase):
     @classmethod
@@ -34,14 +39,7 @@ class FlowTests(TestCase):
 
     def make_story(self, seconds=15):
         p = self.c.post("/api/v1/projects", {"stylePreset": "cartoon"}, format="json").json()
-        r = self.c.post(f"/api/v1/projects/{p['id']}/messages",
-                        {"text": f"A {seconds} second kids story about a brave snail"}, format="json")
-        self.assertEqual(r.status_code, 202, r.content)
-        task = r.json()["task"]
-        self.assertEqual(task["status"], "done", task)
-        brief = task["result"]["assistantMessage"]["brief"]
-        self.assertEqual(brief["stylePreset"], "cartoon")
-        r = self.c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": brief}, format="json")
+        r = self.c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": brief(seconds)}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         r = self.c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json")
         self.assertEqual(r.status_code, 202, r.content)
@@ -162,9 +160,7 @@ class MediaAndHealthTests(TestCase):
         c = APIClient()
         c.post("/api/v1/auth/register", {"email": "m@example.com", "password": "s3cret-pass!"}, format="json")
         p = c.post("/api/v1/projects", {}, format="json").json()
-        r = c.post(f"/api/v1/projects/{p['id']}/messages", {"text": "15 second story about a fox"}, format="json")
-        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": r.json()["task"]["result"]["assistantMessage"]["brief"]},
-               format="json")
+        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": brief(idea="A story about a fox")}, format="json")
         story = c.post(f"/api/v1/projects/{p['id']}/stories", {}, format="json").json()["result"]
         vid = c.post(f"/api/v1/stories/{story['id']}/videos", {"tier": "lite"}, format="json").json()["id"]
         jobs.drain()
@@ -203,9 +199,7 @@ class TaskProgressTests(TestCase):
         c = APIClient()
         c.post("/api/v1/auth/register", {"email": "t@example.com", "password": "s3cret-pass!"}, format="json")
         p = c.post("/api/v1/projects", {}, format="json").json()
-        r = c.post(f"/api/v1/projects/{p['id']}/messages", {"text": "30 second story about an owl"}, format="json")
-        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": r.json()["task"]["result"]["assistantMessage"]["brief"]},
-               format="json")
+        c.post(f"/api/v1/projects/{p['id']}/brief", {"brief": brief(30, "A story about an owl")}, format="json")
         from apps.studio import tasks as task_mod
 
         stages = []

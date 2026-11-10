@@ -5,7 +5,7 @@ from rest_framework.exceptions import ValidationError
 
 import providers
 
-from .schemas import DirectorReply, ScenePlan, StoryOut
+from .schemas import DirectorReply, ScenePlan, SeriesOutline, StoryOut
 from .styles import GENRES, MUSIC_MOODS, STYLE_PRESETS, VOICES
 
 BLOCKED_TERMS = [
@@ -91,4 +91,49 @@ def plan_scenes(story_raw, guide, target_seconds):
     )
     hint = {"story": story_raw, "styleGuide": guide}
     return providers.llm().structured("story", SCENE_SYSTEM, [{"role": "user", "content": content}], ScenePlan,
+                                      hint=hint)
+
+
+SERIES_SYSTEM = f"""You are a showrunner planning an episodic short-video series for social media.
+Plan exactly the requested number of episodes. Each episode is a complete short video with its own hook and a
+cliffhanger or payoff that makes viewers want the next one; together they form one arc with a real ending.
+Create at most 6 original characters (people or creatures only, never places or objects) shared by every episode.
+Each visualDescription must be precise and reusable
+(age, build, hair, clothing, colors, distinctive features) so every episode draws the same character.
+Each synopsis is 2 to 4 sentences describing what happens in that episode. Episode titles are short and evocative,
+without the word "Episode" or a number.
+{SAFETY_RULES}
+Respond only with JSON matching the schema."""
+
+EPISODE_SYSTEM = f"""You are an award-winning short-form storyteller writing the narration for one episode of a series.
+Write for the ear: short vivid sentences, a strong hook in the first 3 seconds, and end on a cliffhanger (or the
+finale's payoff for the last episode). Briefly recall where the previous episode ended when it helps.
+Narration speed is about 2.6 words per second. The script MUST be within 10% of the target word count; a longer
+script won't fit the episode. Use the series characters exactly as given (same names and visualDescription); do not invent new main characters.
+{SAFETY_RULES}
+Respond only with JSON matching the schema."""
+
+
+def series_outline(brief_raw, series, on_text=None):
+    content = (f"Creative brief:\n{json.dumps(brief_raw, indent=2)}\n\nSeries title idea: {series.get('title', '')}\n"
+               f"Episodes: {series['episodeCount']}, each about {series['episodeSeconds']} seconds.\n"
+               f"Premise: {series.get('premise') or brief_raw['idea']}")
+    hint = {"brief": brief_raw, "series": series}
+    return providers.llm().structured("story", SERIES_SYSTEM, [{"role": "user", "content": content}], SeriesOutline,
+                                      hint=hint, on_text=on_text)
+
+
+def write_episode(brief_raw, outline, number, previous=None, instruction=""):
+    ep = outline["episodes"][number - 1]
+    content = (
+        f"Series: {outline['title']} - {outline['logline']}\nCharacters: {json.dumps(outline['characters'])}\n"
+        f"Episode outlines: {json.dumps(outline['episodes'])}\n\nWrite episode {number} of {len(outline['episodes'])}: "
+        f"{ep['title']} - {ep['synopsis']}\nStyle: {brief_raw['stylePreset']}, genre: {brief_raw['genre']}, "
+        f"target length: {brief_raw['targetSeconds']} seconds, so about {int(brief_raw['targetSeconds'] * 2.6)} words."
+    )
+    if previous:
+        content += f"\n\nCurrent draft:\n{json.dumps(previous, indent=2)}\n\nRevise it: {instruction}"
+    hint = {"brief": {**brief_raw, "idea": f"{ep['title']}: {ep['synopsis']}"}, "story": previous,
+            "instruction": instruction, "episode": number, "characters": outline["characters"]}
+    return providers.llm().structured("story", EPISODE_SYSTEM, [{"role": "user", "content": content}], StoryOut,
                                       hint=hint)

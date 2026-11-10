@@ -104,12 +104,30 @@ def render_segment(scene, w, h, work, captions=True):
             last = f"v{i}"
     fade_out = max(0, dur - 0.25)
     filters.append(f"[{last}]fade=t=in:st=0:d=0.2,fade=t=out:st={fade_out:.3f}:d=0.25,format=yuv420p[vout]")
-    filters.append(f"[1:a]aresample=44100,aformat=channel_layouts=stereo,apad,atrim=duration={dur}[aout]")
+    voice = f"aresample=44100,aformat=channel_layouts=stereo,apad,atrim=duration={dur}"
+    sfx = local_path(scene.sfx_url) if scene.sfx_url else None
+    if sfx and sfx.exists():
+        inputs += ["-i", str(sfx)]
+        filters.append(f"[1:a]{voice}[narr]")
+        filters.append(f"[{_input_index(inputs)}:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.7,"
+                       f"apad,atrim=duration={dur}[fx]")
+        filters.append("[narr][fx]amix=inputs=2:duration=first:normalize=0[aout]")
+    else:
+        filters.append(f"[1:a]{voice}[aout]")
     run_ffmpeg([
         *inputs, "-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]",
         "-t", f"{dur:.3f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
         "-c:a", "aac", "-b:a", "160k", str(out),
     ])
+    if scene.trim_start_ms or scene.trim_end_ms:
+        cut = work / f"seg_{scene.idx:02d}_cut.mp4"
+        run_ffmpeg([
+            "-ss", f"{scene.trim_start_ms / 1000:.3f}", "-i", str(out), "-t", f"{scene.effective_ms / 1000:.3f}",
+            "-af", "afade=t=out:st={:.3f}:d=0.2".format(max(0, scene.effective_ms / 1000 - 0.2)),
+            "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-b:a", "160k",
+            str(cut),
+        ])
+        return cut
     return out
 
 
@@ -181,5 +199,5 @@ def render(video, on_progress=lambda f: None):
         if old != thumb:
             old.unlink(missing_ok=True)
     shutil.rmtree(work, ignore_errors=True)
-    total_ms = sum(s.duration_ms for s in scenes) + 2000
+    total_ms = sum(s.effective_ms for s in scenes) + 2000
     return {"output_url": public_url(final), "thumbnail_url": public_url(thumb), "duration_ms": total_ms}

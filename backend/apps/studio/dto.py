@@ -4,12 +4,14 @@ def brief_dto(b):
 
 def message_dto(m):
     return {"id": m.id, "role": m.role, "text": m.content.get("text", ""), "brief": m.content.get("brief"),
+            "actions": m.content.get("actions") or [], "suggestions": m.content.get("suggestions") or [],
             "createdAt": m.created_at}
 
 
 def story_dto(s):
     return {
-        "id": s.id, "projectId": s.project_id, "briefId": s.brief_id, "version": s.version, "title": s.title,
+        "id": s.id, "projectId": s.project_id, "briefId": s.brief_id, "version": s.version, "episode": s.episode,
+        "synopsis": s.synopsis, "title": s.title,
         "logline": s.logline, "hook": s.hook, "script": s.script, "characters": s.characters,
         "estimatedSeconds": s.estimated_seconds, "status": s.status, "source": s.source, "createdAt": s.created_at,
     }
@@ -20,7 +22,8 @@ def scene_dto(s):
         "id": s.id, "idx": s.idx, "narration": s.narration, "captionText": s.caption_text,
         "durationMs": s.duration_ms, "shot": s.shot, "camera": s.camera, "characters": s.characters,
         "imagePrompt": s.image_prompt, "motionPrompt": s.motion_prompt, "keyframeUrl": s.keyframe_url,
-        "clipUrl": s.clip_url, "audioUrl": s.audio_url, "status": s.status,
+        "clipUrl": s.clip_url, "audioUrl": s.audio_url, "status": s.status, "trimStartMs": s.trim_start_ms,
+        "trimEndMs": s.trim_end_ms, "effectiveMs": s.effective_ms, "sfxPrompt": s.sfx_prompt, "sfxUrl": s.sfx_url,
     }
 
 
@@ -28,7 +31,7 @@ def video_dto(v, scenes=False):
     brief = v.story.brief
     data = {
         "id": v.id, "projectId": v.project_id, "storyId": v.story_id, "storyVersion": v.story.version,
-        "title": v.story.title, "tier": v.tier, "aspectRatio": v.aspect_ratio, "stylePreset": brief.style_preset,
+        "title": v.story.title, "episode": v.story.episode, "tier": v.tier, "aspectRatio": v.aspect_ratio, "stylePreset": brief.style_preset,
         "status": v.status, "progress": v.progress, "outputUrl": v.output_url, "thumbnailUrl": v.thumbnail_url,
         "durationMs": v.duration_ms, "voiceId": v.voice_id, "musicMood": v.music_mood, "captions": v.captions,
         "costUsd": float(v.cost_usd), "error": v.error, "createdAt": v.created_at, "updatedAt": v.updated_at,
@@ -41,7 +44,8 @@ def video_dto(v, scenes=False):
 
 def project_dto(p, detail=False):
     data = {"id": p.id, "title": p.title, "stylePreset": p.style_preset, "createdAt": p.created_at,
-            "updatedAt": p.updated_at}
+            "updatedAt": p.updated_at, "series": {k: v for k, v in (p.series or {}).items() if k != "briefId"} or None,
+            "renderMode": p.render_mode}
     latest = p.videos.order_by("-created_at").first()
     data["latestVideo"] = {"id": latest.id, "status": latest.status, "thumbnailUrl": latest.thumbnail_url} if latest else None
     if detail:

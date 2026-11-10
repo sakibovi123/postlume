@@ -146,11 +146,13 @@ FAKE_LLM_STREAM_SECONDS = float(env("FAKE_LLM_STREAM_SECONDS", "4"))
 IMAGE_PROVIDER = env("IMAGE_PROVIDER", "fake")  # fake | fal
 VIDEO_PROVIDER = env("VIDEO_PROVIDER", "fake")  # fake | fal
 TTS_PROVIDER = env("TTS_PROVIDER", "fake")  # fake | fal
+SFX_PROVIDER = env("SFX_PROVIDER") or TTS_PROVIDER  # fake | fal
 
 for _name, _value, _allowed in [("LLM_PROVIDER", LLM_PROVIDER, ("fake", "openrouter")),
                                 ("IMAGE_PROVIDER", IMAGE_PROVIDER, ("fake", "fal")),
                                 ("VIDEO_PROVIDER", VIDEO_PROVIDER, ("fake", "fal")),
-                                ("TTS_PROVIDER", TTS_PROVIDER, ("fake", "fal"))]:
+                                ("TTS_PROVIDER", TTS_PROVIDER, ("fake", "fal")),
+                                ("SFX_PROVIDER", SFX_PROVIDER, ("fake", "fal"))]:
     if _value not in _allowed:
         from django.core.exceptions import ImproperlyConfigured
 
@@ -158,12 +160,14 @@ for _name, _value, _allowed in [("LLM_PROVIDER", LLM_PROVIDER, ("fake", "openrou
 
 # The test suite must never call paid providers, whatever .env says.
 if len(sys.argv) > 1 and sys.argv[1] == "test":
-    LLM_PROVIDER = IMAGE_PROVIDER = VIDEO_PROVIDER = TTS_PROVIDER = "fake"
+    LLM_PROVIDER = IMAGE_PROVIDER = VIDEO_PROVIDER = TTS_PROVIDER = SFX_PROVIDER = "fake"
 
 OPENROUTER_API_KEY = env("OPENROUTER_API_KEY", "")
 LLM_BASE_URL = env("LLM_BASE_URL", "https://openrouter.ai/api/v1")
 LLM_CHAT_MODEL = env("LLM_CHAT_MODEL", "google/gemini-2.5-flash")
 LLM_STORY_MODEL = env("LLM_STORY_MODEL", "anthropic/claude-sonnet-5.5")
+# The studio assistant calls tools, so it needs a model with reliable function calling.
+LLM_AGENT_MODEL = env("LLM_AGENT_MODEL") or LLM_STORY_MODEL
 
 FAL_KEY = env("FAL_KEY", "")
 # Generate page: credits are charged from fal's listed price at this rate.
@@ -177,6 +181,7 @@ FAL_VIDEO_MODEL_STANDARD = env("FAL_VIDEO_MODEL_STANDARD", "fal-ai/kling-video/v
 FAL_VIDEO_MODEL_PREMIUM = env("FAL_VIDEO_MODEL_PREMIUM", "fal-ai/kling-video/v3/pro/image-to-video")
 FAL_TTS_MODEL = env("FAL_TTS_MODEL", "fal-ai/kokoro/american-english")
 FAL_STT_MODEL = env("FAL_STT_MODEL", "fal-ai/whisper")
+FAL_SFX_MODEL = env("FAL_SFX_MODEL", "fal-ai/elevenlabs/sound-effects/v2")
 
 # Rough USD estimates for the ledger; update after the model spike.
 COST_ESTIMATES = {
@@ -185,6 +190,7 @@ COST_ESTIMATES = {
     "video_second_standard": float(env("COST_VIDEO_SECOND_STANDARD_USD", "0.07")),
     "video_second_premium": float(env("COST_VIDEO_SECOND_PREMIUM_USD", "0.112")),
     "tts_1k_chars": float(env("COST_TTS_1K_CHARS_USD", "0.02")),
+    "sfx": float(env("COST_SFX_USD", "0.02")),
 }
 
 FFMPEG_BIN = env("FFMPEG_BIN", "")

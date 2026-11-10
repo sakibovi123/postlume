@@ -141,7 +141,11 @@ export const api = {
   updateProject: (id: number, body: { title?: string; stylePreset?: string }) => request("PATCH", `/projects/${id}`, body),
   deleteProject: (id: number) => request("DELETE", `/projects/${id}`),
   sendMessage: (id: number, text: string, stylePreset?: string) =>
-    request<{ task: GenTask; userMessage: ChatMessage }>("POST", `/projects/${id}/messages`, { text, stylePreset }),
+    request<{ task: GenTask; userMessage: ChatMessage }>("POST", `/projects/${id}/messages`, {
+      text,
+      stylePreset,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
   confirmBrief: (id: number, brief: CreativeBrief) => request<Brief>("POST", `/projects/${id}/brief`, { brief }),
   generateStory: (id: number, briefId?: number) => request<GenTask>("POST", `/projects/${id}/stories`, { briefId }),
   task: (id: number) => request<GenTask>("GET", `/tasks/${id}`),

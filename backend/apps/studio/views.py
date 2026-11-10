@@ -1,10 +1,9 @@
 import time
 
 from django.db import transaction
-from django.db.models import Max
 from django.http import FileResponse
 from pydantic import ValidationError as PydanticError
-from rest_framework.exceptions import APIException, NotFound, PermissionDenied, Throttled, ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
@@ -18,14 +17,13 @@ from pipeline import jobs
 from providers.base import ProviderError
 from providers.media import local_path
 
-from . import ai, tasks
+from . import ai, services, tasks
+from .agent import Agent, split_suggestions
+from .services import ACTIVE
 from .dto import brief_dto, message_dto, project_dto, scene_dto, story_dto, video_dto
 from .models import Brief, ChatMessage, GenerationTask, Project, Scene, Story, Video, VideoStatus
 from .schemas import CreativeBrief
 from .styles import GENRES, MUSIC_MOODS, STYLE_PRESETS, VOICES
-
-ACTIVE = [s for s in VideoStatus.values if s not in (VideoStatus.READY, VideoStatus.FAILED)]
-
 
 class GenerationThrottle(UserRateThrottle):
     scope = "generation"
@@ -67,17 +65,9 @@ def _llm(fn, *args, **kwargs):
         raise ProviderFailed(str(e))
 
 
-def _next_version(project):
-    return (project.stories.aggregate(v=Max("version"))["v"] or 0) + 1
-
-
-def _save_story(project, brief, out, source):
-    data = out if isinstance(out, dict) else out.model_dump()
-    return Story.objects.create(
-        project=project, brief=brief, version=_next_version(project), title=data["title"][:200],
-        logline=data["logline"], hook=data["hook"], script=data["script"], characters=data["characters"],
-        estimated_seconds=int(data.get("estimatedSeconds") or 0), source=source,
-    )
+def _save_story(project, brief, out, source, like=None):
+    episode, synopsis = (like.episode, like.synopsis) if like else (1, "")
+    return services.save_story(project, brief, out, source, episode=episode, synopsis=synopsis)
 
 
 class StylesView(APIView):
@@ -133,10 +123,12 @@ class MessagesView(APIView):
     throttle_classes = [GenerationThrottle]
 
     def post(self, request, pk):
-        _, p = _project(request, pk, Role.CREATOR)
+        m, p = _project(request, pk, Role.CREATOR)
         text = (request.data.get("text") or "").strip()
         if not text:
             raise ValidationError({"text": "Required."})
+        if any(t["kind"] == "agent" for t in tasks.active_tasks(p)):
+            raise ValidationError({"detail": "The assistant is still working on your last message."})
         if len(text) > 4000:
             raise ValidationError({"text": "Keep messages under 4000 characters."})
         ai.moderate(text)
@@ -146,18 +138,18 @@ class MessagesView(APIView):
         if p.title == "Untitled project":
             p.title = text[:60]
         p.save()
-        history, preset = list(p.messages.all()), p.style_preset
+        assistant = Agent(p, m, request.user, client={"timezone": str(request.data.get("timezone") or "")[:64]})
 
         def work(rep):
-            rep.stage("reading", 8)
-            reply, _cost = _llm(ai.director_reply, p, history, preset, on_text=rep.stream)
-            rep.stage("saving", 95)
-            brief = reply.brief.model_dump() if reply.brief else None
-            bot_msg = ChatMessage.objects.create(project=p, role="assistant", content={"text": reply.reply, "brief": brief})
+            text, cost = _llm(assistant.run, rep)
+            rep.stage("saving", 96)
+            text, suggestions = split_suggestions(text)
+            bot_msg = ChatMessage.objects.create(project=p, role="assistant", content={
+                "text": text, "actions": assistant.actions, "suggestions": suggestions})
             Project.objects.filter(pk=p.pk).update(updated_at=bot_msg.created_at)
             return {"userMessage": message_dto(user_msg), "assistantMessage": message_dto(bot_msg)}
 
-        task = tasks.start(p, "director", work)
+        task = tasks.start(p, "agent", work)
         return Response({"task": tasks.task_dto(task), "userMessage": message_dto(user_msg)}, status=202)
 
 
@@ -169,15 +161,7 @@ class BriefView(APIView):
         except PydanticError as e:
             raise ValidationError({"brief": e.errors(include_url=False, include_context=False)})
         ai.moderate(f"{brief.idea} {brief.customStyle or ''}")
-        b = Brief.objects.create(
-            project=p, style_preset=brief.stylePreset, custom_style=brief.customStyle or "", idea=brief.idea,
-            genre=brief.genre, aspect_ratio=brief.aspectRatio, target_seconds=brief.targetSeconds,
-            language=brief.language, voice_id=brief.voiceId or "", music_mood=brief.musicMood or "",
-            narration=brief.narration, raw=brief.model_dump(),
-        )
-        p.style_preset = brief.stylePreset
-        p.save(update_fields=["style_preset", "updated_at"])
-        return Response(brief_dto(b), status=201)
+        return Response(brief_dto(services.create_brief(p, brief)), status=201)
 
 
 class StoriesView(APIView):
@@ -224,7 +208,7 @@ class StoryDetailView(APIView):
         if changes:
             ai.moderate(" ".join(str(v) for v in changes.values()))
             data = {**story_dto(s), **changes}
-            s = _save_story(s.project, s.brief, data, "edit")
+            s = _save_story(s.project, s.brief, data, "edit", like=s)
         if request.data.get("status") == "approved":
             with transaction.atomic():
                 s.project.stories.exclude(pk=s.pk).update(status="draft")
@@ -257,7 +241,7 @@ class StoryRewriteView(APIView):
                 billing.refund(entry, "Refund: rewrite failed")
                 raise
             rep.stage("saving", 97)
-            story = _save_story(s.project, s.brief, out, "rewrite")
+            story = _save_story(s.project, s.brief, out, "rewrite", like=s)
             billing.add_cost(key, cost)
             return story_dto(story)
 
@@ -277,7 +261,7 @@ class TaskView(APIView):
 class StoryRestoreView(APIView):
     def post(self, request, pk):
         _, s = _story(request, pk, Role.CREATOR)
-        return Response(story_dto(_save_story(s.project, s.brief, story_dto(s), "restore")), status=201)
+        return Response(story_dto(_save_story(s.project, s.brief, story_dto(s), "restore", like=s)), status=201)
 
 
 class StartRenderView(APIView):
@@ -285,38 +269,14 @@ class StartRenderView(APIView):
 
     def post(self, request, pk):
         m, s = _story(request, pk, Role.CREATOR)
-        tier = request.data.get("tier") or "lite"
-        if tier not in billing.CREDITS_PER_10S:
-            raise ValidationError({"tier": "Must be lite, standard or premium."})
-        plan = billing.subscription_for(m.organization).plan_info
-        if tier not in plan["tiers"]:
-            raise PermissionDenied(f"The {plan['name']} plan doesn't include the {tier} tier.")
-        seconds = s.brief.target_seconds
-        if seconds > plan["max_seconds"]:
-            raise PermissionDenied(f"The {plan['name']} plan allows videos up to {plan['max_seconds']} seconds.")
-        active = Video.objects.filter(project__organization=m.organization, status__in=ACTIVE).count()
-        if active >= settings.MAX_CONCURRENT_RENDERS_PER_ORG:
-            raise Throttled(detail=f"Up to {settings.MAX_CONCURRENT_RENDERS_PER_ORG} renders can run at once.")
         aspect = request.data.get("aspectRatio") or s.brief.aspect_ratio
         if aspect not in ("9:16", "16:9", "1:1"):
             raise ValidationError({"aspectRatio": "Invalid aspect ratio."})
-        with transaction.atomic():
-            if s.status != "approved":
-                s.project.stories.exclude(pk=s.pk).update(status="draft")
-                s.status = "approved"
-                s.save(update_fields=["status"])
-            v = Video.objects.create(
-                project=s.project, story=s, created_by=request.user, tier=tier, aspect_ratio=aspect,
-                voice_id=request.data.get("voiceId") or s.brief.voice_id or "af_heart",
-                music_mood=request.data.get("musicMood") or s.brief.music_mood or "none",
-                captions=bool(request.data.get("captions", True)),
-            )
-            key = request.data.get("idempotencyKey") or f"video:{v.id}"
-            billing.charge(m.organization, Action.VIDEO_RENDER, billing.video_credits(tier, seconds), key,
-                           video_id=v.id, story_id=s.id, note=f"{tier.title()} video, {seconds}s")
-            v.charge_key = key
-            v.save(update_fields=["charge_key"])
-            jobs.enqueue(v, "planning", charge_key=key)
+        v = services.start_render(
+            m.organization, request.user, s, request.data.get("tier") or "lite", aspect=aspect,
+            voice_id=request.data.get("voiceId"), music_mood=request.data.get("musicMood"),
+            captions=bool(request.data.get("captions", True)), key=request.data.get("idempotencyKey"),
+        )
         return Response(video_dto(v, scenes=True), status=202)
 
 
@@ -366,16 +326,7 @@ class VideoDetailView(APIView):
 
 
 def _reassemble(m, v, from_voice=False):
-    key = f"reassemble:{v.id}:{int(time.time() * 1000)}"
-    billing.charge(m.organization, Action.VIDEO_REASSEMBLE, billing.REASSEMBLE_CREDITS, key, video_id=v.id,
-                   note="Re-assemble")
-    with transaction.atomic():
-        if from_voice:
-            v.scenes.update(audio_url="", words=[])
-        Video.objects.filter(pk=v.pk).update(status=VideoStatus.QUEUED, progress=80, error="")
-        jobs.enqueue(v, "voice" if from_voice else "assembling", chain=from_voice, charge_key=key)
-    v.refresh_from_db()
-    return Response(video_dto(v, scenes=True), status=202)
+    return Response(video_dto(services.reassemble(m.organization, v, from_voice), scenes=True), status=202)
 
 
 class ReassembleView(APIView):

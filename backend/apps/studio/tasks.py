@@ -38,6 +38,8 @@ STAGES = {
     ],
 }
 STAGES["rewrite"] = [("brief", "Reading the current draft"), *STAGES["story"][1:]]
+STAGES["agent"] = [("thinking", "Thinking"), ("working", "Working on it"), ("saving", "Saving")]
+STAGES["series"] = [("outline", "Planning the season"), ("episodes", "Writing episodes"), ("saving", "Saving")]
 
 STORY_PROGRESS = {"title": 8, "logline": 14, "hook": 20, "characters": 28, "script": 45, "estimatedSeconds": 92}
 
@@ -71,6 +73,14 @@ class Reporter:
         if progress is not None:
             self.task.progress = max(self.task.progress, progress)
         self._save(force=True)
+
+    def activity(self, label, progress=None):
+        self.task.partial = {**self.task.partial, "activity": [*(self.task.partial.get("activity") or []), label]}
+        self.stage("working", progress)
+
+    def update(self, stage, progress, **partial):
+        self.task.partial = {**self.task.partial, **partial}
+        self.stage(stage, progress)
 
     def stream(self, text):
         partial = parse_partial(text)

@@ -290,9 +290,11 @@ function SceneRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-xs text-mute">
             <span className="font-medium text-ink">Scene {scene.idx + 1}</span>
-            <span>{(scene.durationMs / 1000).toFixed(1)}s</span>
+            <span>{(scene.effectiveMs / 1000).toFixed(1)}s</span>
             <span>{scene.camera}</span>
             {scene.clipUrl ? <Badge tone="accent">AI clip</Badge> : scene.keyframeUrl && <Badge>pan & zoom</Badge>}
+            {(scene.trimStartMs > 0 || scene.trimEndMs > 0) && <Badge>trimmed</Badge>}
+            {scene.sfxPrompt && <Badge tone="ok">sound effect</Badge>}
           </div>
           <p className="text-sm">{scene.narration}</p>
           {can("creator") && (

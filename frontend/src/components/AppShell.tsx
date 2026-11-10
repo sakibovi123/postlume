@@ -1,6 +1,6 @@
 "use client";
 
-import { Coins, Film, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Users, WandSparkles, X, Zap } from "lucide-react";
+import { Bot, Coins, Film, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Users, WandSparkles, X, Zap } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ import { cx, PageLoading, Select } from "./ui";
 
 const NAV = [
   { href: "/studio", label: "Create", icon: WandSparkles },
+  { href: "/assistant", label: "Assistant", icon: Bot },
   { href: "/generate", label: "All models", icon: Sparkles },
   { href: "/library", label: "Library", icon: Film },
   { href: "/settings/plugins", label: "Plugins", icon: Plug },

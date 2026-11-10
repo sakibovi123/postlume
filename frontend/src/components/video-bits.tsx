@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   Clapperboard,
+  Clock,
   Film,
   ImageIcon,
   Layers,
@@ -55,6 +56,12 @@ export function StatusBadge({ status }: { status: VideoStatus }) {
         <CheckCircle2 className="size-3" /> Ready
       </Badge>
     );
+  if (status === "waiting")
+    return (
+      <Badge>
+        <Clock className="size-3" /> In line
+      </Badge>
+    );
   if (status === "failed")
     return (
       <Badge tone="bad">
@@ -69,7 +76,7 @@ export function StatusBadge({ status }: { status: VideoStatus }) {
 }
 
 export function RenderPipeline({ video }: { video: Video }) {
-  const current = STEPS.findIndex((s) => s.id === video.status);
+  const current = STEPS.findIndex((s) => s.id === (video.status === "waiting" ? "queued" : video.status));
   const failed = video.status === "failed";
   const pct = Math.max(2, Math.round(video.progress));
   const scenes = video.scenes ?? [];

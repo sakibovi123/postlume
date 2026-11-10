@@ -45,6 +45,36 @@ class OpenRouterLlm:
                          {"role": "user", "content": f"That JSON was invalid: {e}. Reply with corrected JSON only."}]
         raise ProviderError("The model did not return valid structured output.")
 
+    def agent(self, system, messages, tools, state=None):
+        """One tool-calling turn. Returns ({"content", "tool_calls", "raw"}, cost)."""
+        if not settings.OPENROUTER_API_KEY and "openrouter.ai" in settings.LLM_BASE_URL:
+            raise ProviderError("OPENROUTER_API_KEY is not set.")
+        body = {"model": settings.LLM_AGENT_MODEL, "messages": [{"role": "system", "content": system}, *messages],
+                "tools": tools, "usage": {"include": True}}
+        try:
+            r = httpx.post(f"{settings.LLM_BASE_URL}/chat/completions", json=body, headers=self._headers(),
+                           timeout=180)
+        except httpx.HTTPError as e:
+            raise ProviderError(f"LLM request failed: {e}") from e
+        if r.status_code >= 400:
+            raise ProviderError(f"LLM returned {r.status_code}: {r.text[:500]}")
+        data = r.json()
+        if data.get("error"):
+            raise ProviderError(f"LLM error: {str(data['error'])[:500]}")
+        msg = data["choices"][0]["message"]
+        calls = []
+        for c in msg.get("tool_calls") or []:
+            try:
+                args = json.loads(c["function"].get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            calls.append({"id": c["id"], "name": c["function"]["name"], "arguments": args})
+        raw = {"role": "assistant", "content": msg.get("content") or "", "tool_calls": msg.get("tool_calls") or None}
+        if not raw["tool_calls"]:
+            raw.pop("tool_calls")
+        cost = float((data.get("usage") or {}).get("cost") or 0)
+        return {"content": msg.get("content") or "", "tool_calls": calls, "raw": raw}, cost
+
     def _body(self, model, messages, schema):
         if not settings.OPENROUTER_API_KEY and "openrouter.ai" in settings.LLM_BASE_URL:
             raise ProviderError("OPENROUTER_API_KEY is not set.")
