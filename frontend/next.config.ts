@@ -4,6 +4,7 @@ const API = process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  allowedDevOrigins: ["*.ngrok-free.dev", "*.ngrok-free.app"],
   devIndicators: {
     position: "bottom-right",
   },
@@ -23,6 +24,9 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  async redirects() {
+    return [{ source: "/settings/connections", destination: "/settings/plugins", permanent: true }];
   },
   async rewrites() {
     return [

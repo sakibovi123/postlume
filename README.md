@@ -50,7 +50,7 @@ ducks the music automatically.
 
 - **Auth & orgs**: email/password sessions, organizations, roles (owner/admin/creator/viewer),
   invite links, and an org switcher.
-- **Connections**: OAuth connect, disconnect and token refresh for Instagram (Business Login), Facebook
+- **Plugins**: OAuth connect, disconnect and token refresh for Instagram (Business Login), Facebook
   Pages and YouTube. Tokens are Fernet-encrypted at rest. Refresh with `python manage.py refresh_social_tokens` (cron).
 - **Director chat**: style presets, a structured Creative Brief, and an editable brief form.
 - **Stories**: generate, edit, AI rewrite with an instruction, regenerate, version history and restore, approve.

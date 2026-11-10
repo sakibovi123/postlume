@@ -194,7 +194,11 @@ MAX_CONCURRENT_RENDERS_PER_ORG = int(env("MAX_CONCURRENT_RENDERS_PER_ORG", "2"))
 OAUTH = {
     "youtube": {"client_id": env("GOOGLE_CLIENT_ID", ""), "client_secret": env("GOOGLE_CLIENT_SECRET", "")},
     "facebook": {"client_id": env("META_APP_ID", ""), "client_secret": env("META_APP_SECRET", "")},
-    "instagram": {"client_id": env("INSTAGRAM_APP_ID", ""), "client_secret": env("INSTAGRAM_APP_SECRET", "")},
+    "instagram": {
+        "client_id": env("META_APP_ID", ""),
+        "client_secret": env("META_APP_SECRET", ""),
+        "config_id": env("INSTAGRAM_CONFIG_ID", ""),
+    },
 }
 META_GRAPH_VERSION = env("META_GRAPH_VERSION", "v21.0")
 

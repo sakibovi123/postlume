@@ -28,7 +28,7 @@ def account_dto(a):
 
 
 def _back(**params):
-    return redirect(f"{settings.PUBLIC_APP_URL}/settings/connections?{urlencode(params)}")
+    return redirect(f"{settings.PUBLIC_APP_URL}/settings/plugins?{urlencode(params)}")
 
 
 class SocialListView(APIView):
@@ -37,7 +37,7 @@ class SocialListView(APIView):
         accounts = SocialAccount.objects.filter(organization=m.organization).exclude(status="disconnected")
         return Response({
             "accounts": [account_dto(a) for a in accounts.order_by("platform", "created_at")],
-            "configured": {p: bool(settings.OAUTH[p]["client_id"]) for p in PLATFORMS},
+            "configured": {p: oauth.is_configured(p) for p in PLATFORMS},
         })
 
 

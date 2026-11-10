@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Logo } from "@/components/AppShell";
-import { ConnectionCards } from "@/components/ConnectionCards";
+import { PluginList } from "@/components/PluginList";
 import { SessionProvider } from "@/components/session";
 import { Button, Card, cx, PageLoading } from "@/components/ui";
 
@@ -39,7 +39,7 @@ export default function Onboarding() {
                 reviews early. You can skip this step.
               </p>
             </div>
-            <ConnectionCards compact />
+            <PluginList compact />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setStep(2)}>
                 Skip for now

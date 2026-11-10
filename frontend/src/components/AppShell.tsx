@@ -17,7 +17,7 @@ const NAV = [
   { href: "/studio", label: "Create", icon: WandSparkles },
   { href: "/generate", label: "All models", icon: Sparkles },
   { href: "/library", label: "Library", icon: Film },
-  { href: "/settings/connections", label: "Connections", icon: Plug },
+  { href: "/settings/plugins", label: "Plugins", icon: Plug },
   { href: "/settings/team", label: "Team", icon: Users },
   { href: "/billing", label: "Billing", icon: Coins },
 ];

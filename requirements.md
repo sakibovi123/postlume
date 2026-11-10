@@ -272,7 +272,7 @@ export const ScenePlanSchema = z.object({
 2. **Studio** (`/studio/[projectId]`): chat on the left. On the right, a live panel that shows the brief → story editor → render progress → final player, depending on the stage.
 3. **New video** (`/studio/new`): style preset gallery with sample thumbnails, plus a prompt box.
 4. **Library** (`/library`): video grid, filters (style, status, format).
-5. **Connections** (`/settings/connections`): IG / FB / YT cards with connect/reconnect/disconnect.
+5. **Plugins** (`/settings/plugins`): IG / FB / YT cards with connect/reconnect/disconnect.
 6. **Billing** (`/billing`): credits, usage, plan.
 7. **Team** (`/settings/team`).
 

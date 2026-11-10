@@ -1,21 +1,21 @@
 import { Suspense } from "react";
 
-import { ConnectionCards } from "@/components/ConnectionCards";
+import { PluginList } from "@/components/PluginList";
 import { PageHeader } from "@/components/ui";
 
 import ConnectResult from "./ConnectResult";
 
-export default function ConnectionsPage() {
+export default function PluginsPage() {
   return (
     <div className="max-w-5xl">
       <PageHeader
-        title="Connections"
-        subtitle="Connect Instagram, Facebook Pages and YouTube. Publishing and scheduling arrive in Phase 2."
+        title="Plugins"
+        subtitle="Connect your channels now. Publishing and scheduling are coming soon."
       />
       <Suspense fallback={null}>
         <ConnectResult />
       </Suspense>
-      <ConnectionCards />
+      <PluginList />
     </div>
   );
 }
