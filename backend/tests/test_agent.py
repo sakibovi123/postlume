@@ -222,3 +222,75 @@ class AssistantTests(TestCase):
         self.assertEqual(text, "Ready!")
         self.assertEqual(options, ["Yes", "No", "Later"])
         self.assertEqual(split_suggestions("Plain"), ("Plain", []))
+
+    # --- Picking an AI video model -------------------------------------------------------------------------
+
+    def agent(self):
+        from apps.accounts.models import Membership
+        from apps.studio.agent import Agent
+        from apps.studio.models import Project
+
+        m = Membership.objects.get(organization_id=self.org_id)
+        return Agent(Project.objects.get(pk=self.p["id"]), m, m.user)
+
+    def set_balance(self, credits):
+        Subscription.objects.filter(organization_id=self.org_id).update(credits_balance=credits)
+
+    def test_suggests_models_the_wallet_can_pay_for(self):
+        import json
+
+        self.write_series()
+        self.set_balance(1000)
+        out = self.agent().call("suggest_video_models", {}, _Rep(), 50)
+        self.assertTrue(out["ok"], out)
+        self.assertTrue(1 <= len(out["options"]) <= 5)
+        for o in out["options"]:
+            self.assertTrue(o["affordable"])
+            self.assertLessEqual(o["creditsTotal"], 1000)
+            self.assertEqual(o["creditsTotal"], o["creditsPerEpisode"] * 3)
+        self.assertIn("lite", out)
+        self.assertNotIn("fal", json.dumps(out).lower())
+
+    def test_no_model_fits_a_small_wallet(self):
+        self.write_series()
+        self.set_balance(6)  # enough for lite (2 credits x 3 episodes), not for any AI video model
+        out = self.agent().call("suggest_video_models", {}, _Rep(), 50)
+        self.assertEqual(out["options"], [])
+        self.assertIsNotNone(out["cheapestUnaffordable"])
+        self.assertTrue(out["lite"]["affordable"])
+
+    def test_renders_with_the_picked_model_and_charges_its_price(self):
+        self.write_series()
+        self.set_balance(1000)
+        agent = self.agent()
+        option = agent.call("suggest_video_models", {}, _Rep(), 50)["options"][0]
+        out = agent.call("render_episodes", {"mode": "all", "model": option["model"]}, _Rep(), 50)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["creditsCharged"], option["creditsTotal"])
+        self.assertEqual(self.balance(), 1000 - option["creditsTotal"])
+        videos = Video.objects.filter(project_id=self.p["id"])
+        self.assertEqual(videos.count(), 3)
+        self.assertTrue(all(v.model.endswith(option["model"]) for v in videos))
+        jobs.drain()
+        self.assertTrue(all(v.status == "ready" for v in Video.objects.filter(project_id=self.p["id"])))
+
+    def test_rejects_unknown_models(self):
+        self.write_series()
+        self.set_balance(1000)
+        out = self.agent().call("render_episodes", {"mode": "all", "model": "made-up/model"}, _Rep(), 50)
+        self.assertFalse(out["ok"])
+        self.assertEqual(Video.objects.filter(project_id=self.p["id"]).count(), 0)
+
+    def test_provider_name_is_hidden_from_errors(self):
+        from providers.base import ProviderError, hide_provider
+
+        self.assertNotIn("fal", str(ProviderError("fal fal-ai/kling-video/v3 failed: FAL_KEY is not set")).lower())
+        self.assertEqual(hide_provider("plain error"), "plain error")
+
+
+class _Rep:
+    def activity(self, *a, **k):
+        pass
+
+    def stage(self, *a, **k):
+        pass

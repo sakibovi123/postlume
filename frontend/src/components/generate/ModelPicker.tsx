@@ -6,6 +6,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cx, Spinner } from "@/components/ui";
 import type { FalModel } from "@/lib/types";
 
+/** Model ids without the hosting provider's namespace, which users never see. */
+export function modelLabel(id: string) {
+  return id.replace(/^fal-ai\//, "");
+}
+
 function Thumb({ src, className }: { src: string; className?: string }) {
   return (
     <span className={cx("block shrink-0 overflow-hidden rounded-xl bg-linear-to-br from-accent/30 to-hot/30", className)}>
@@ -98,7 +103,7 @@ export function ModelPicker({
                     <span className="truncate">{m.name}</span>
                     {m.featured && <Sparkles className="size-3 shrink-0 text-accent" />}
                   </span>
-                  <span className="block truncate font-mono text-[11px] text-mute">{m.id}</span>
+                  <span className="block truncate font-mono text-[11px] text-mute">{modelLabel(m.id)}</span>
                 </span>
               </button>
             ))}

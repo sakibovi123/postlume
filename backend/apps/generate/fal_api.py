@@ -83,10 +83,29 @@ def price(endpoint_id):
         data = _get(f"{API}/models/pricing", {"endpoint_id": endpoint_id})
         p = next(iter(data.get("prices") or []), None)
     except ProviderError:
-        p = None
+        return None  # e.g. rate limited: don't cache, so the next request can price it
     result = {"unitPrice": float(p["unit_price"]), "unit": p["unit"], "currency": p.get("currency", "USD")} if p else {}
     cache.set(key, result, 60 * 60 * 6)
     return result or None
+
+
+def prices(endpoint_ids):
+    """Price many models in one request (the pricing API rate-limits one-by-one lookups) and cache each."""
+    todo = [e for e in endpoint_ids if cache.get(f"fal:price:{e}") is None]
+    for i in range(0, len(todo), 50):
+        chunk = todo[i:i + 50]
+        try:
+            r = httpx.get(f"{API}/models/pricing", params=[("endpoint_id", e) for e in chunk], headers=_headers(),
+                          timeout=30)
+        except httpx.HTTPError:
+            return
+        if r.status_code >= 400:
+            return
+        found = {p["endpoint_id"]: p for p in r.json().get("prices") or []}
+        for e in chunk:
+            p = found.get(e)
+            cache.set(f"fal:price:{e}", {"unitPrice": float(p["unit_price"]), "unit": p["unit"],
+                                         "currency": p.get("currency", "USD")} if p else {}, 60 * 60 * 6)
 
 
 def model_info(endpoint_id):
@@ -108,7 +127,7 @@ def model_info(endpoint_id):
         "thumbnail": meta.get("thumbnailUrl") or "", "fields": fields(input_schema, schemas),
         "price": price(endpoint_id),
     }
-    cache.set(key, info, 60 * 60 * 6)
+    cache.set(key, info, 60 * 60 * 6 if info["price"] else 60)
     return info
 
 

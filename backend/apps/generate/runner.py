@@ -10,6 +10,7 @@ from django.db import close_old_connections, connection
 from django.utils import timezone
 
 from apps.billing import service as billing
+from providers.base import hide_provider
 from apps.billing.models import UsageLedger
 import re
 import subprocess
@@ -85,7 +86,7 @@ def _track(gen_id):
         gen.output = result
         gen.media = _save_media(gen, result)
         if not gen.media:
-            raise RuntimeError("fal finished but returned no media files.")
+            raise RuntimeError("The model finished but returned no media files.")
         gen.status, gen.queue_position, gen.finished_at = "done", None, timezone.now()
         gen.save(update_fields=["output", "media", "status", "queue_position", "finished_at", "updated_at"])
     except Exception as e:
@@ -125,7 +126,7 @@ def _message(exc):
         text = FRIENDLY.get(getattr(exc, "error_type", None) or "") or str(exc).strip() or type(exc).__name__
     if "content_policy_violation" in text:
         text = FRIENDLY["content_policy_violation"]
-    return text[:1500]
+    return hide_provider(text)[:1500]
 
 
 def find_media(node, found=None):
@@ -199,7 +200,7 @@ def _track_long(gen):
                 result = fal_client.result(gen.endpoint_id, shot["requestId"])
                 video = next((m for m in find_media(result) if m["type"] == "video"), None)
                 if not video:
-                    raise RuntimeError("fal returned no video for a shot.")
+                    raise RuntimeError("The model returned no video for a shot.")
                 download(video["remote"], clips / f"clip_{i:03d}.mp4")
                 shot["done"] = True
             except Exception as e:

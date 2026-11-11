@@ -61,21 +61,40 @@ def approve(story):
         story.save(update_fields=["status"])
 
 
+def render_credits(tier, seconds, model=""):
+    """Credits to render `seconds` of video. A picked AI model is priced from its live rate; if it has left the
+    catalog since, it's charged like premium so we never undercharge."""
+    if model:
+        from .video_models import credits_for_key
+
+        return credits_for_key(model, seconds) or billing.video_credits("premium", seconds)
+    return billing.video_credits(tier, seconds)
+
+
+def video_credits(v, seconds=None):
+    from .video_models import public_key
+
+    seconds = v.story.brief.target_seconds if seconds is None else seconds
+    return render_credits(v.tier, seconds, public_key(v.model) if v.model else "")
+
+
 def create_video(org, user, story, tier, aspect=None, voice_id=None, music_mood=None, captions=True, wait=False,
-                 key=None):
+                 key=None, model=None):
     seconds = story.brief.target_seconds
     with transaction.atomic():
         approve(story)
         v = Video.objects.create(
             project=story.project, story=story, created_by=user, tier=tier, aspect_ratio=aspect or story.brief.aspect_ratio,
+            model=model["endpoint"] if model else "",
             voice_id=voice_id or story.brief.voice_id or "af_heart",
             music_mood=music_mood or story.brief.music_mood or "none", captions=captions,
             status=VideoStatus.WAITING if wait else VideoStatus.QUEUED,
         )
         key = key or f"{'episode' if wait else 'video'}:{v.id}"
         label = f"Episode {story.episode}, " if wait else ""
-        billing.charge(org, Action.VIDEO_RENDER, billing.video_credits(tier, seconds), key, video_id=v.id,
-                       story_id=story.id, note=f"{label}{tier.title()} video, {seconds}s")
+        quality = model["name"] if model else tier.title()
+        billing.charge(org, Action.VIDEO_RENDER, render_credits(tier, seconds, model["key"] if model else ""), key,
+                       video_id=v.id, story_id=story.id, note=f"{label}{quality} video, {seconds}s"[:255])
         v.charge_key = key
         v.save(update_fields=["charge_key"])
         if not wait:

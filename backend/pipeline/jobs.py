@@ -11,6 +11,7 @@ from apps.billing import service as billing
 from apps.studio.models import RenderJob, Video, VideoStatus
 
 from .steps import STEPS
+from providers.base import hide_provider
 
 log = logging.getLogger("postlume.worker")
 MAX_ATTEMPTS = 3
@@ -69,7 +70,7 @@ def _finished(video_id, charge_key, ok, error=""):
 
 
 def _failed(job, video, exc):
-    detail = f"{type(exc).__name__}: {exc}"
+    detail = hide_provider(f"{type(exc).__name__}: {exc}")
     log.warning("job %s failed: %s\n%s", job.pk, detail, traceback.format_exc())
     if job.attempts < MAX_ATTEMPTS:
         job.status = "queued"

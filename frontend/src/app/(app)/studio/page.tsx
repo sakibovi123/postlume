@@ -97,7 +97,7 @@ export default function VideoSandbox() {
     try {
       const input: Record<string, unknown> = { [promptField.name]: prompt.trim() };
       for (const s of settings) if (!(long && s.name === "duration")) input[s.name] = s.value;
-      if (long && usd !== null && usd > 3 && !confirm(`This makes ${shots} clips and costs about $${usd.toFixed(2)} on fal. Continue?`)) return;
+      if (long && usd !== null && usd > 3 && !confirm(`This makes ${shots} clips and costs about $${usd.toFixed(2)}. Continue?`)) return;
       const g = await api.generate({
         endpointId: model, modelName: current?.name ?? model, category: "text-to-video", input,
         totalSeconds: long ? seconds : undefined,
@@ -136,7 +136,7 @@ export default function VideoSandbox() {
         <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
           Type it. <span className="text-gradient">Watch it.</span>
         </h1>
-        <p className="text-sm text-mute">Prompt in, video out — pick any text-to-video model on fal.ai.</p>
+        <p className="text-sm text-mute">Prompt in, video out — pick any AI video model.</p>
       </div>
 
       <div className="glass glow relative z-10 animate-fade-up space-y-3 rounded-3xl p-4">

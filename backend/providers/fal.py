@@ -49,9 +49,11 @@ class FalImage:
 class FalVideo:
     name = "fal"
 
-    def animate(self, image_path, image_remote_url, prompt, seconds, tier, dest):
+    def animate(self, image_path, image_remote_url, prompt, seconds, tier, dest, model=None):
         if tier == "lite":
             return VideoResult(path=None, provider="pan-zoom")
+        if model:
+            return self._animate_with(model, image_path, image_remote_url, prompt, seconds, dest)
         model = settings.FAL_VIDEO_MODEL_PREMIUM if tier == "premium" else settings.FAL_VIDEO_MODEL_STANDARD
         clip_seconds = 5 if seconds <= 5.5 else 10
         out = _subscribe(model, {
@@ -60,6 +62,34 @@ class FalVideo:
         download(out["video"]["url"], dest)
         rate = COST["video_second_premium"] if tier == "premium" else COST["video_second_standard"]
         return VideoResult(path=Path(dest), cost_usd=clip_seconds * rate, provider=model)
+
+
+    def _animate_with(self, model, image_path, image_remote_url, prompt, seconds, dest):
+        """Any catalog image-to-video model the user picked in chat; inputs are built from its schema."""
+        from apps.generate import fal_api, shots
+        from apps.studio.video_models import image_field
+
+        info = fal_api.model_info(model)
+        names = {f["name"] for f in info["fields"]}
+        args = {"prompt": prompt, image_field(info): image_remote_url or upload(image_path)}
+        clip = shots.clip_seconds(info)
+        if "duration" in names and clip:
+            field = next(f for f in info["fields"] if f["name"] == "duration")
+            nums = sorted(float(o) for o in field.get("options") or [] if str(o).replace(".", "", 1).isdigit())
+            want = next((n for n in nums if n >= seconds), nums[-1] if nums else min(clip, max(1, round(seconds))))
+            args["duration"] = shots.duration_value(info, want)
+        out = _subscribe(model, args)
+        url = (out.get("video") or {}).get("url") if isinstance(out.get("video"), dict) else None
+        if not url:
+            from apps.generate.runner import find_media
+
+            found = find_media(out)
+            url = next((f["remote"] for f in found if f["type"] == "video"), None)
+        if not url:
+            raise ProviderError("The video model returned no video.")
+        download(url, dest)
+        usd, _exact = fal_api.estimate(info, {k: v for k, v in args.items() if k == "duration"})
+        return VideoResult(path=Path(dest), cost_usd=usd or 0.0, provider=model)
 
 
 class FalTts:

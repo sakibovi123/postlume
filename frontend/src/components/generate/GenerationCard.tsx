@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Orb } from "@/components/fx";
 import { cx } from "@/components/ui";
+import { modelLabel } from "@/components/generate/ModelPicker";
 import type { Generation } from "@/lib/types";
 
 export const length = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ""}` : `${s}s`);
@@ -87,10 +88,10 @@ export function GenerationCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">
-              {gen.modelName}
+              {modelLabel(gen.modelName)}
               {gen.plan && <span className="ml-2 font-normal text-mute">· {length(gen.plan.totalSeconds)} · {gen.plan.count} shots</span>}
             </p>
-            <p className="truncate font-mono text-[11px] text-mute">{gen.endpointId}</p>
+            <p className="truncate font-mono text-[11px] text-mute">{modelLabel(gen.endpointId)}</p>
           </div>
           {gen.credits > 0 && (
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/[0.05] px-2 py-0.5 text-xs text-mute">

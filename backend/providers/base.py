@@ -1,9 +1,20 @@
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+_PROVIDER = re.compile(r"\bfal-ai/|\bfal(?:\.ai|_client|-ai)?\b|\bFAL_KEY\b", re.I)
+
+
+def hide_provider(text):
+    """Users must never see which infrastructure provider runs the models."""
+    text = _PROVIDER.sub(lambda m: "" if m.group(0).lower().endswith("/") else "the AI service"
+                         if m.group(0).upper() != "FAL_KEY" else "the AI service key", str(text or ""))
+    return re.sub(r"\s{2,}", " ", text).strip()
+
 
 class ProviderError(Exception):
-    pass
+    def __init__(self, message=""):
+        super().__init__(hide_provider(message))
 
 
 @dataclass

@@ -97,7 +97,8 @@ def clips(video, scene=None):
     cost, todo = 0.0, [s for s in _scenes(video, scene) if not s.clip_url]
     for n, s in enumerate(todo):
         res = providers.video().animate(local_path(s.keyframe_url), s.keyframe_remote_url, s.motion_prompt,
-                                        s.duration_ms / 1000, video.tier, video_dir(video.id) / f"clip_{s.idx}_{secrets.token_hex(3)}.mp4")
+                                        s.duration_ms / 1000, video.tier, video_dir(video.id) / f"clip_{s.idx}_{secrets.token_hex(3)}.mp4",
+                                        model=video.model or None)
         if res.path:
             s.clip_url = public_url(res.path)
             s.save(update_fields=["clip_url"])

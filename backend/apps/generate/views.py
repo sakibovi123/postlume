@@ -16,7 +16,7 @@ from apps.billing import service as billing
 from apps.billing.models import Action
 from apps.studio import ai
 from apps.studio.views import GenerationThrottle
-from providers.base import ProviderError
+from providers.base import ProviderError, hide_provider
 
 from . import fal_api, runner, shots
 from .models import Generation
@@ -96,7 +96,7 @@ class UploadView(APIView):
             try:
                 url = fal_client.upload_file(tmp.name)
             except Exception as e:
-                raise FalUnavailable(f"Upload to fal failed: {e}")
+                raise FalUnavailable(f"Upload failed: {hide_provider(e)}")
         return Response({"url": url, "name": f.name, "contentType": f.content_type}, status=201)
 
 

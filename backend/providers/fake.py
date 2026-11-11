@@ -358,7 +358,7 @@ class FakeImage:
 class FakeVideo:
     name = "fake-video"
 
-    def animate(self, image_path, image_remote_url, prompt, seconds, tier, dest):
+    def animate(self, image_path, image_remote_url, prompt, seconds, tier, dest, model=None):
         return VideoResult(path=None, provider=self.name)
 
 

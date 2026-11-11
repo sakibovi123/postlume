@@ -6,6 +6,7 @@ import secrets
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from django.conf import settings
 from django.db.models import F
 from pydantic import ValidationError as PydanticError
 from rest_framework.exceptions import APIException
@@ -18,7 +19,7 @@ from pipeline import jobs
 from providers.base import ProviderError
 from providers.media import public_url, video_dir
 
-from . import ai, services, tasks
+from . import account_tools, ai, services, tasks, video_models
 from .dto import story_dto
 from .models import Brief, ChatMessage, Project, Scene, Video, VideoStatus
 from .schemas import CreativeBrief
@@ -60,10 +61,15 @@ TOOLS = [
         "The user is told in the chat when it finishes.", {"episodes": EPISODES}),
     _fn("rewrite_episode", "Rewrite one episode's story with an instruction.",
         {"episode": INT, "instruction": STR}, ["episode", "instruction"]),
+    _fn("suggest_video_models", "The best AI video models the user's credits can pay for, for these episodes, "
+        "ranked by fit with the style, with the credit cost of each. Call before asking which model to use.", {
+            "episodes": EPISODES, "style": {**STR, "description": "Style preset or a word like cinematic, anime"}}),
     _fn("render_episodes", "Start making videos. mode 'all' queues every episode without a video (or the listed "
-        "ones); mode 'one_by_one' renders only the next episode. Only call after the user agreed.", {
+        "ones); mode 'one_by_one' renders only the next episode. Only call after the user agreed and picked a "
+        "model. Pass model (a key from suggest_video_models) for an AI video model, or tier 'lite' for the "
+        "cheap no-motion option.", {
             "mode": {"type": "string", "enum": ["all", "one_by_one"]},
-            "tier": {"type": "string", "enum": ["lite", "standard", "premium"]}, "episodes": EPISODES,
+            "model": STR, "tier": {"type": "string", "enum": ["lite", "standard", "premium"]}, "episodes": EPISODES,
         }, ["mode"]),
     _fn("retry_episode", "Retry a failed episode render from the step that failed.", {"episode": INT}, ["episode"]),
     _fn("get_episode", "Full details of one episode: script and every scene with its prompts.", {"episode": INT},
@@ -85,6 +91,19 @@ TOOLS = [
         }, ["episode", "position", "narration", "imagePrompt"]),
     _fn("add_sound_effect", "Add a sound effect under a scene, e.g. 'door creaks open, distant thunder'. An empty "
         "description removes it.", {"episode": INT, "scene": INT, "description": STR}, ["episode", "scene"]),
+    _fn("get_account", "The signed-in user's own account: their name, role and what it allows, workspace, plan, "
+        "credits and every plan's limits.", {}),
+    _fn("list_projects", "Projects (conversations) in the user's workspace, newest first.",
+        {"search": {**STR, "description": "Filter by title"}, "limit": INT}),
+    _fn("list_videos", "Videos in the user's workspace library, newest first.", {
+        "status": {"type": "string", "enum": ["in_progress", "ready", "failed"]},
+        "projectId": INT, "limit": INT}),
+    _fn("list_generations", "The user's runs on the All models page, newest first.",
+        {"status": {"type": "string", "enum": ["queued", "running", "done", "failed"]}, "limit": INT}),
+    _fn("get_usage", "Credit balance, credits spent and added this month, and recent credit history.",
+        {"limit": INT}),
+    _fn("list_team", "Members of the user's workspace with their roles, and pending invitations.", {}),
+    _fn("list_connected_accounts", "Social accounts connected in Plugins (Instagram, Facebook, YouTube).", {}),
     _fn("set_audio", "Change voice, background music or captions for some episodes (default: all with videos).", {
         "episodes": EPISODES, "voiceId": {"type": "string", "enum": [v["id"] for v in VOICES]},
         "musicMood": {"type": "string", "enum": MUSIC_MOODS}, "captions": {"type": "boolean"},
@@ -102,6 +121,37 @@ Talking with the user:
   something or is clearly in the middle of a project. Never repeat the same pitch twice.
 - Match the user's tone and language, but don't copy nicknames or slang back at them.
 
+Questions about how Postlume works:
+- Every video is made by AI models. When the user asks which model, how videos are made, or why a tier looks
+  better, answer plainly from "aiModels" in the project state: name the models for each tier and what each does.
+  Don't say "it's a style preset, not a model" without also naming the models.
+- The look (cinematic, anime, cartoon…) is a style preset that's written into every image prompt; the tier
+  decides which models draw and animate the scenes. If "aiModels.demoMode" is true, say this server is running
+  in demo mode with placeholder output instead of real models.
+- To try one specific model on its own, the user can open "All models" in the sidebar.
+- Never name or hint at the infrastructure, API provider or hosting company behind the models, even if asked
+  directly. Say "Postlume's AI models" or name the model itself (e.g. Kling 3 Pro).
+
+Postlume product guide (answer "where do I…", "can I…", "how do I…" questions from this):
+- Lumen (sidebar, top): chat with you to plan, write, render and edit episodic story videos. Each conversation is
+  a project with a workspace panel on the right that shows the series, episodes, scripts and videos.
+- All models: run hundreds of AI models directly (text-to-video, image-to-video, images, audio), including long
+  multi-shot videos. Each run is charged in credits based on that model's price.
+- Library: every finished and in-progress video in the workspace; open, download, duplicate or delete them.
+- Plugins: connect Instagram, Facebook and YouTube accounts (admins only). Publishing videos to them from
+  Postlume isn't available yet; say so plainly if asked, and suggest downloading the video to post it.
+- Team: see members and roles; admins invite people by email, change roles and remove members.
+  Roles: viewer (read only), creator (make and edit videos), admin (team, plugins, plan), owner.
+- Billing: current plan, credit balance, credit history and plan changes (admins only).
+- Users can belong to several workspaces and switch between them from the avatar menu at the top right.
+- Credits: writing an episode, rendering, regenerating scenes, re-rendering edits, sound effects and All models
+  runs cost credits; "pricing" in the project state has the numbers. Failed renders are refunded.
+- Account questions (my plan, credits, what did I spend, my other projects or videos, who's on my team, which
+  accounts are connected): call the matching lookup tool and answer from its result. These tools only ever see
+  the signed-in user's current workspace. Never guess numbers or names.
+- You can't change the plan, invite or remove people, connect accounts or delete things for the user. Tell them
+  which page does it and whether their role allows it.
+
 Making videos:
 1. You need the idea, the number of episodes and the length of each episode. If the user hasn't given the number
    of episodes or the episode length, ask for both in one short question (offer options such as 1, 3, 5 or 10
@@ -109,9 +159,14 @@ Making videos:
    (style, genre, 9:16 unless they mention YouTube or landscape, voice, music) and mention your picks briefly.
    If preferredStylePreset is set in the project state, the user picked that look, so use it.
 2. Then call plan_series and write_episodes in the same turn. Writing runs in the background; say it's underway.
-3. When the episodes are written, ask whether to start making the videos. State the credit cost and ask whether
-   to render all episodes at once or one at a time. Call render_episodes only after the user says yes. Use the
-   lite tier unless they ask for higher quality and their plan includes it.
+3. When the episodes are written and the user wants the videos made, call suggest_video_models first, then ask
+   which model to use. List each option on its own line: "1. **Name**: a few words on what it's best at,
+   N credits" (the total for all the episodes), then the Lite option the same way. Mention their credit
+   balance once. If no AI model fits the balance, say so, offer Lite, fewer or shorter episodes, or more credits.
+   Also ask whether to render all episodes at once or one at a time unless they already said. Put the model
+   names in the suggestions line (up to 5). Call render_episodes with the chosen model only after they pick.
+   If the user names a model or quality up front ("use the best one", "cheapest"), pick from the options
+   yourself and confirm the cost instead of listing them all.
 4. Once videos exist, carry out edit commands with the edit tools. Episode and scene numbers are 1-based, as the
    user sees them. Call get_episode when you need scene details. Several edits in one turn are applied together
    in a single re-render, so do them all before replying. Edits need the episode's video to be finished.
@@ -129,7 +184,7 @@ Rules:
 - {ai.SAFETY_RULES}
 - Reply in plain conversational text, usually under 90 words. No headings or tables.
 - When there's a natural next step, end with one line: [[suggestions: reply 1 | reply 2 | reply 3]] giving 2-3
-  short things the user might say next. Leave it out for casual chat or simple answers."""
+  short things the user might say next (up to 5 when they're choosing a model). Leave it out for casual chat or simple answers."""
 
 
 def context_line(client):
@@ -143,6 +198,45 @@ def context_line(client):
         tz, tz_name = ZoneInfo("UTC"), "UTC"
     now = datetime.now(tz)
     return f"Current date and time for the user: {now:%A, %d %B %Y, %I:%M %p} ({tz_name})."
+
+
+MODEL_NAMES = {
+    "fal-ai/flux/schnell": "FLUX.1 schnell",
+    "fal-ai/bytedance/seedream/v4.5/edit": "Seedream 4.5 (ByteDance)",
+    "fal-ai/kling-video/v2.5-turbo/pro/image-to-video": "Kling 2.5 Turbo Pro",
+    "fal-ai/kling-video/v3/pro/image-to-video": "Kling 3 Pro",
+    "fal-ai/kokoro/american-english": "Kokoro TTS",
+    "fal-ai/whisper": "Whisper",
+    "fal-ai/elevenlabs/sound-effects/v2": "ElevenLabs Sound Effects v2",
+}
+
+
+def _model_name(model_id):
+    return MODEL_NAMES.get(model_id, model_id)
+
+
+def models_info():
+    """The AI models behind each tier, read from settings so the assistant never describes stale models."""
+    images = _model_name(settings.FAL_IMAGE_MODEL)
+    refs = _model_name(settings.FAL_IMAGE_REF_MODEL)
+    llm = settings.LLM_STORY_MODEL.split("/")[-1]
+    return {
+        "demoMode": any(p == "fake" for p in (settings.IMAGE_PROVIDER, settings.VIDEO_PROVIDER, settings.TTS_PROVIDER)),
+        "tiers": {
+            "lite": f"{images} draws one still image per scene; the video is made with a camera pan and zoom over "
+                    "those images (no AI video model), so it's fast and cheap but has no real motion.",
+            "standard": f"{refs} draws each scene from character reference sheets so characters stay consistent, "
+                        f"then {_model_name(settings.FAL_VIDEO_MODEL_STANDARD)} animates it into a real AI video clip.",
+            "premium": f"Same as standard, but {_model_name(settings.FAL_VIDEO_MODEL_PREMIUM)} animates the clips: "
+                       "the most realistic motion, lighting and detail.",
+        },
+        "everyTier": {
+            "scripts": f"{llm} writes the story and every scene's prompts",
+            "voice": _model_name(settings.FAL_TTS_MODEL),
+            "captionsTiming": _model_name(settings.FAL_STT_MODEL),
+            "soundEffects": _model_name(settings.FAL_SFX_MODEL),
+        },
+    }
 
 
 def build_state(project, org):
@@ -178,6 +272,7 @@ def build_state(project, org):
         "pricing": {"writePerEpisode": billing.STORY_CREDITS, "renderPer10Seconds": billing.CREDITS_PER_10S,
                     "regenerateScenePer10Seconds": billing.CREDITS_PER_10S, "reRender": billing.REASSEMBLE_CREDITS,
                     "soundEffect": SFX_CREDITS},
+        "aiModels": models_info(),
         "preferredStylePreset": project.style_preset or None,
         "series": {k: series.get(k) for k in ("title", "premise", "episodeCount", "episodeSeconds")} if series else None,
         "logline": outline.get("logline"),
@@ -203,7 +298,7 @@ def split_suggestions(text):
     m = re.search(r"\[\[\s*suggestions?\s*:(.*?)\]\]", text, re.S | re.I)
     if not m:
         return text.strip(), []
-    options = [o.strip() for o in m.group(1).split("|") if o.strip()][:3]
+    options = [o.strip() for o in m.group(1).split("|") if o.strip()][:5]
     return (text[:m.start()] + text[m.end():]).strip(), options
 
 
@@ -220,6 +315,8 @@ def _api_message(e):
 class Agent:
     def __init__(self, project, membership, user, client=None):
         self.p, self.org, self.user = project, membership.organization, user
+        # Every account lookup goes through this membership, so Lumen only sees the signed-in user's workspace.
+        self.membership = membership
         self.client = client or {}
         self.actions = []
         self.edits = {}
@@ -259,7 +356,28 @@ class Agent:
         except ToolError as e:
             return {"ok": False, "error": str(e)}
         except (APIException, InsufficientCredits, ProviderError) as e:
-            return {"ok": False, "error": _api_message(e)}
+            return {"ok": False, "error": video_models._scrub(_api_message(e))}
+
+    def t_get_account(self):
+        return account_tools.get_account(self.membership)
+
+    def t_list_projects(self, search="", limit=20):
+        return account_tools.list_projects(self.membership, current_id=self.p.id, search=search, limit=limit)
+
+    def t_list_videos(self, status="", projectId=None, limit=20):
+        return account_tools.list_videos(self.membership, status=status, project_id=projectId, limit=limit)
+
+    def t_list_generations(self, status="", limit=20):
+        return account_tools.list_generations(self.membership, status=status, limit=limit)
+
+    def t_get_usage(self, limit=20):
+        return account_tools.get_usage(self.membership, limit=limit)
+
+    def t_list_team(self):
+        return account_tools.list_team(self.membership)
+
+    def t_list_connected_accounts(self):
+        return account_tools.list_connected_accounts(self.membership)
 
     def _act(self, kind, label, **extra):
         self.actions.append({"type": kind, "label": label, **extra})
@@ -352,7 +470,20 @@ class Agent:
         self._act("rewrite", f"Rewrote episode {episode}")
         return {"title": new.title, "words": len(new.script.split())}
 
-    def t_render_episodes(self, mode="all", tier=None, episodes=None):
+    def t_suggest_video_models(self, episodes=None, style=""):
+        stories = services.latest_stories(self.p)
+        series = self.p.series or {}
+        total = series.get("episodeCount") or max(stories, default=0)
+        if not total:
+            raise ToolError("Nothing is written yet.")
+        latest = services.episode_videos(self.p)
+        nums = sorted({int(n) for n in episodes}) if episodes else [
+            n for n in range(1, total + 1) if n not in latest or latest[n].status == VideoStatus.FAILED] or [1]
+        seconds = series.get("episodeSeconds") or self._brief().target_seconds
+        brief = self._brief()
+        return video_models.suggest(self._balance(), seconds, len(nums), style or brief.style_preset)
+
+    def t_render_episodes(self, mode="all", tier=None, episodes=None, model=None):
         series = self.p.series or {}
         stories = services.latest_stories(self.p)
         total = series.get("episodeCount") or max(stories, default=0)
@@ -374,16 +505,27 @@ class Agent:
         if missing:
             raise ToolError(f"Episode {missing[0]} isn't written yet.")
         seconds = stories[nums[0]].brief.target_seconds
-        services.check_plan(self.org, tier, seconds)
-        cost = sum(billing.video_credits(tier, stories[n].brief.target_seconds) for n in nums)
+        picked = None
+        if model:
+            picked = video_models.endpoint(model)
+            if not picked:
+                raise ToolError("That model isn't available. Call suggest_video_models and use one of its keys.")
+            tier = "standard"
+            plan = billing.subscription_for(self.org).plan_info
+            if seconds > plan["max_seconds"]:
+                raise ToolError(f"The {plan['name']} plan allows episodes up to {plan['max_seconds']} seconds.")
+        else:
+            services.check_plan(self.org, tier, seconds)
+        key = picked["key"] if picked else ""
+        cost = sum(services.render_credits(tier, stories[n].brief.target_seconds, key) for n in nums)
         self._afford(cost)
         for n in nums:
-            services.create_video(self.org, self.user, stories[n], tier, wait=True)
-        self.p.render_mode, self.p.render_tier = mode, tier
-        self.p.save(update_fields=["render_mode", "render_tier", "updated_at"])
+            services.create_video(self.org, self.user, stories[n], tier, wait=True, model=picked)
+        self.p.render_mode, self.p.render_tier, self.p.render_model = mode, tier, key
+        self.p.save(update_fields=["render_mode", "render_tier", "render_model", "updated_at"])
         services.kick(self.org.id)
         label = f"episode {nums[0]}" if len(nums) == 1 else f"episodes {nums[0]}-{nums[-1]}"
-        self._act("render", f"Started rendering {label} ({tier})", episodes=nums)
+        self._act("render", f"Started rendering {label} ({picked['name'] if picked else tier})", episodes=nums)
         return {"episodes": nums, "creditsCharged": cost, "creditsLeft": self._balance()}
 
     def t_retry_episode(self, episode):
@@ -392,7 +534,7 @@ class Agent:
             raise ToolError(f"Episode {episode} has no failed video to retry.")
         failed = v.jobs.filter(status="failed").order_by("-id").first()
         credits = billing.REASSEMBLE_CREDITS if failed and failed.step == "assembling" else \
-            billing.video_credits(v.tier, v.story.brief.target_seconds)
+            services.video_credits(v)
         self._afford(credits)
         key = f"retry:{v.id}:{int(time.time() * 1000)}"
         billing.charge(self.org, Action.VIDEO_RENDER, credits, key, video_id=v.id, note=f"Retry episode {episode}")
@@ -451,7 +593,7 @@ class Agent:
         s = self._scene(v, scene)
         if not (imagePrompt or motionPrompt or narration):
             raise ToolError("Give a new imagePrompt, motionPrompt or narration.")
-        credits = billing.video_credits(v.tier, s.duration_ms / 1000)
+        credits = services.video_credits(v, s.duration_ms / 1000)
         self._afford(credits)
         if imagePrompt:
             ai.moderate(imagePrompt)
@@ -519,7 +661,7 @@ class Agent:
             raise ToolError("A new scene needs narration and an imagePrompt.")
         ai.moderate(f"{narration} {imagePrompt}")
         seconds = min(10, max(2, len(narration.split()) / WORDS_PER_SECOND))
-        credits = billing.video_credits(v.tier, seconds)
+        credits = services.video_credits(v, seconds)
         self._afford(credits)
         guide = v.style_guide or ""
         prompt = imagePrompt if not guide or guide[:40].lower() in imagePrompt.lower() else f"{guide}. {imagePrompt}"
@@ -661,12 +803,11 @@ def _announce_written(project, brief, done, failed):
         text = "I couldn't write the episodes this time, and your credits were refunded. Want me to try again?"
         suggestions = ["Try again"]
     else:
-        per = billing.video_credits(project.render_tier or "lite", brief.target_seconds)
         what = f"All {total} episodes" if len(done) == total and total > 1 else (
             "The story" if total == 1 else f"Episode{'s' if len(done) > 1 else ''} {', '.join(map(str, done))}")
         text = (f"{what} of \"{series['title']}\" {'are' if len(done) > 1 else 'is'} written. Read them on the "
-                f"right. Shall I start making the video{'s' if len(done) > 1 else ''}? On the lite tier that's "
-                f"{per} credit{'s' if per != 1 else ''} per episode ({per * len(done)} total).")
+                f"right. Shall I start making the video{'s' if len(done) > 1 else ''}? I'll show you the AI video "
+                "models your credits cover, from quick and cheap to top quality.")
         if failed:
             text += f" Episode{'s' if len(failed) > 1 else ''} {', '.join(map(str, failed))} failed and were refunded."
         suggestions = (["Yes, make all episodes", "One at a time", "Rewrite episode 1"] if len(done) > 1

@@ -347,7 +347,7 @@ class RetryView(APIView):
         key = f"retry:{v.id}:{int(time.time() * 1000)}"
         failed = v.jobs.filter(status="failed").order_by("-id").first()
         credits = billing.REASSEMBLE_CREDITS if failed and failed.step == "assembling" else \
-            billing.video_credits(v.tier, v.story.brief.target_seconds)
+            services.video_credits(v)
         billing.charge(m.organization, Action.VIDEO_RENDER, credits, key, video_id=v.id, note="Retry render")
         jobs.retry(v, charge_key=key)
         v.refresh_from_db()
@@ -396,7 +396,7 @@ class SceneRegenerateView(APIView):
         s.keyframe_url = s.keyframe_remote_url = s.clip_url = ""
         s.save()
         key = request.data.get("idempotencyKey") or f"scene:{s.id}:{int(time.time() * 1000)}"
-        billing.charge(m.organization, Action.SCENE_REGENERATE, billing.video_credits(v.tier, s.duration_ms / 1000),
+        billing.charge(m.organization, Action.SCENE_REGENERATE, services.video_credits(v, s.duration_ms / 1000),
                        key, video_id=v.id, note=f"Regenerate scene {s.idx + 1}")
         Video.objects.filter(pk=v.pk).update(status=VideoStatus.QUEUED, error="")
         jobs.enqueue(v, "keyframes", scene=s, chain=True, charge_key=key)

@@ -13,6 +13,7 @@ class Project(models.Model):
     series = models.JSONField(default=dict, blank=True)  # {title, logline, premise, episodeCount, episodeSeconds}
     render_mode = models.CharField(max_length=16, blank=True)  # all | one_by_one
     render_tier = models.CharField(max_length=16, blank=True)
+    render_model = models.CharField(max_length=200, blank=True)  # AI video model picked in chat (public key)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -82,6 +83,7 @@ class Video(models.Model):
     story = models.ForeignKey(Story, on_delete=models.PROTECT, related_name="videos")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     tier = models.CharField(max_length=16)  # lite | standard | premium
+    model = models.CharField(max_length=200, blank=True)  # provider endpoint that animates scenes; blank = tier default
     aspect_ratio = models.CharField(max_length=8)
     status = models.CharField(max_length=16, choices=VideoStatus.choices, default=VideoStatus.QUEUED)
     progress = models.IntegerField(default=0)

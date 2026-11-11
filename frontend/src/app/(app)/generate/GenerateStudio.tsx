@@ -171,13 +171,13 @@ export default function GenerateStudio() {
           <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
             Generate <span className="text-gradient">anything</span>
           </h1>
-          <p className="mt-2 text-sm text-mute">Every fal.ai model for video, images and audio, in one place.</p>
+          <p className="mt-2 text-sm text-mute">Hundreds of AI models for video, images and audio, in one place.</p>
         </div>
       </div>
 
       {!meta.configured && (
         <p className="rounded-2xl border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
-          FAL_KEY isn&apos;t set in backend/.env, so models can&apos;t be loaded.
+          AI models aren&apos;t available right now. Please try again later.
         </p>
       )}
 
