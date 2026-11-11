@@ -168,7 +168,7 @@ export function PluginRows({
             <span
               key={r.id}
               className={`h-1.5 w-8 rounded-full transition-colors ${
-                r.live ? "bg-accent shadow-[0_0_10px_rgb(214_255_61/0.6)]" : r.needsReconnect ? "bg-warn" : "bg-white/10"
+                r.live ? "bg-accent shadow-[0_0_10px_rgb(46_230_197/0.6)]" : r.needsReconnect ? "bg-warn" : "bg-white/10"
               }`}
             />
           ))}

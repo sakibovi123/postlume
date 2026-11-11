@@ -33,13 +33,13 @@ export function SeriesEmpty({ onSend }: { onSend: (text: string) => void }) {
     { icon: Wand2, title: "Edit by chatting", text: "\"Cut scene 2\", \"darker music\", \"add a door creak\"." },
   ];
   return (
-    <Card className="relative overflow-hidden">
+    <div className="relative grid min-h-full place-items-center overflow-hidden">
       <div className="bg-grid pointer-events-none absolute inset-0" />
       <div className="relative flex flex-col items-center px-4 py-10 text-center">
         <Orb icon={Sparkles} size="md" />
         <h2 className="mt-6 text-2xl font-semibold tracking-tight">Your creative partner is ready</h2>
         <p className="mt-2 max-w-md text-sm text-mute">
-          Chat with the assistant on the left. It plans the series, writes every episode, renders the videos and edits them
+          Chat with Lumen on the left. It plans the series, writes every episode, renders the videos and edits them
           whenever you ask.
         </p>
         <div className="mt-8 grid w-full max-w-3xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -60,7 +60,7 @@ export function SeriesEmpty({ onSend }: { onSend: (text: string) => void }) {
           </Button>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -254,7 +254,7 @@ export function SeriesPanel({
                 <div>
                   <p className="font-medium">No video yet</p>
                   <p className="mt-1 text-sm text-mute">
-                    {current.story ? "Ask the assistant to make it, or start it here." : "The assistant will make it once the episode is written."}
+                    {current.story ? "Ask Lumen to make it, or start it here." : "Lumen will make it once the episode is written."}
                   </p>
                 </div>
                 {current.story && can("creator") && (

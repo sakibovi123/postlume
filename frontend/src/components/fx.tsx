@@ -14,7 +14,7 @@ export function Orb({ icon: Icon = Sparkles, size = "lg" }: { icon?: LucideIcon;
       <div className="absolute inset-0 animate-ping-soft rounded-full bg-accent/10" />
       <div className="orb-ring absolute inset-0 animate-spin-slow rounded-full" />
       <div className="orb-ring absolute inset-3 animate-spin-rev rounded-full opacity-60" />
-      <div className="absolute inset-7 animate-pulse-core rounded-full bg-[radial-gradient(circle_at_35%_30%,#f4ffb8,var(--color-accent)_45%,#3a4a00_100%)] shadow-[0_0_60px_10px_rgb(214_255_61/0.35)]" />
+      <div className="absolute inset-7 animate-pulse-core rounded-full bg-[radial-gradient(circle_at_35%_30%,#9ff5e4,var(--color-accent)_45%,#04463b_100%)] shadow-[0_0_60px_10px_rgb(46_230_197/0.35)]" />
       <Icon className={cx("relative text-black", size === "lg" ? "size-7" : "size-5")} />
     </div>
   );

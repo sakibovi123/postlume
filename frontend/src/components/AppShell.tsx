@@ -14,8 +14,7 @@ import { SessionProvider, useSession } from "./session";
 import { cx, PageLoading, Select } from "./ui";
 
 const NAV = [
-  { href: "/studio", label: "Create", icon: WandSparkles },
-  { href: "/assistant", label: "Assistant", icon: Bot },
+  // { href: "/studio", label: "Create", icon: WandSparkles },
   { href: "/generate", label: "All models", icon: Sparkles },
   { href: "/library", label: "Library", icon: Film },
   { href: "/settings/plugins", label: "Plugins", icon: Plug },
@@ -101,6 +100,41 @@ function UserMenu() {
   );
 }
 
+function LumenLink({ collapsed, active, onClick }: { collapsed: boolean; active: boolean; onClick: () => void }) {
+  return (
+    <Link
+      href="/assistant"
+      onClick={onClick}
+      title={collapsed ? "Lumen AI" : undefined}
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "group block rounded-2xl bg-linear-to-br p-px transition",
+        active
+          ? "from-accent via-accent/40 to-hot/60 shadow-[0_8px_30px_-10px_rgb(46_230_197/0.55)]"
+          : "from-accent/50 via-white/10 to-hot/40 hover:from-accent hover:to-hot/60",
+      )}
+    >
+      <span
+        className={cx(
+          "flex items-center gap-3 rounded-[15px] px-2.5 py-2.5 transition",
+          active ? "bg-panel/80" : "bg-panel/95 group-hover:bg-panel/80",
+          collapsed && "lg:justify-center lg:px-0",
+        )}
+      >
+        <span className="accent-gradient grid size-9 shrink-0 place-items-center rounded-xl">
+          <Bot className="size-[18px]" />
+        </span>
+        <span className={cx("min-w-0", collapsed && "lg:hidden")}>
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+            Lumen AI <Sparkles className="size-3 text-accent" />
+          </span>
+          <span className="block truncate text-xs text-mute">Your content creator</span>
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 function Sidebar({
   collapsed,
   onToggle,
@@ -132,6 +166,8 @@ function Sidebar({
           </button>
         </div>
         <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
+          <LumenLink collapsed={collapsed} active={pathname.startsWith("/assistant")} onClick={onCloseDrawer} />
+          <div className={cx("mx-1 my-2 h-px bg-white/[0.06]", collapsed && "lg:mx-2")} />
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (

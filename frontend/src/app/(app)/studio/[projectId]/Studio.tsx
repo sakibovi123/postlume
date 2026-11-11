@@ -9,6 +9,7 @@ import { StageStepper } from "@/components/fx";
 import { useSession } from "@/components/session";
 import { BriefEditor } from "@/components/studio/BriefEditor";
 import { ChatPanel } from "@/components/studio/ChatPanel";
+import { LumenWorkspace, type WorkspaceView } from "@/components/studio/LumenWorkspace";
 import { SeriesEmpty, SeriesPanel } from "@/components/studio/SeriesPanel";
 import { StoryEditor } from "@/components/studio/StoryEditor";
 import { StoryLive } from "@/components/studio/StoryLive";
@@ -39,6 +40,7 @@ export default function Studio() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState("");
   const [chatOpen, setChatOpen] = useState(true);
+  const [view, setView] = useState<WorkspaceView>("split");
   const [storyTask, setStoryTask] = useState<GenTask | null>(null);
   const [storyKey, setStoryKey] = useState(0);
 
@@ -135,6 +137,7 @@ export default function Studio() {
               <ArrowLeft className="size-4" />
             </Link>
           )}
+          {!agentMode && (
           <button
             onClick={() => setChatOpen(!chatOpen)}
             className={cx(
@@ -145,6 +148,7 @@ export default function Studio() {
           >
             {chatOpen ? <PanelLeftClose className="size-4" /> : <MessageSquare className="size-4" />}
           </button>
+          )}
           {editingTitle ? (
             <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => e.key === "Enter" && saveTitle()} className="max-w-md text-lg" />
           ) : (
@@ -164,30 +168,33 @@ export default function Studio() {
       </div>
 
       {agentMode && (
-        <div className={cx("grid gap-6", chatOpen && "lg:grid-cols-[400px_1fr]")}>
-          {chatOpen && (
-            <div className="animate-fade-in lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
-              <ChatPanel project={project} styles={styles} onMessage={addMessage} onTurnDone={turnDone} registerSend={registerSend} />
-            </div>
+        <LumenWorkspace
+          view={view}
+          onViewChange={setView}
+          title={project.series?.title ?? "New series"}
+          subtitle={
+            project.series
+              ? `${project.series.episodeCount} episode${project.series.episodeCount > 1 ? "s" : ""}`
+              : undefined
+          }
+          chat={<ChatPanel project={project} styles={styles} onMessage={addMessage} onTurnDone={turnDone} registerSend={registerSend} />}
+        >
+          {project.series ? (
+            <SeriesPanel
+              project={project}
+              styles={styles}
+              billing={billing}
+              onVideoChange={onVideoChange}
+              onReload={turnDone}
+              onSend={(t) => {
+                setView((v) => (v === "canvas" ? "split" : v));
+                sendRef.current(t);
+              }}
+            />
+          ) : (
+            <SeriesEmpty onSend={(t) => sendRef.current(t)} />
           )}
-          <div className="min-w-0 animate-fade-up">
-            {project.series ? (
-              <SeriesPanel
-                project={project}
-                styles={styles}
-                billing={billing}
-                onVideoChange={onVideoChange}
-                onReload={turnDone}
-                onSend={(t) => {
-                  setChatOpen(true);
-                  sendRef.current(t);
-                }}
-              />
-            ) : (
-              <SeriesEmpty onSend={(t) => sendRef.current(t)} />
-            )}
-          </div>
-        </div>
+        </LumenWorkspace>
       )}
 
       {!agentMode && (

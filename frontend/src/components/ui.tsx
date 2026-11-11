@@ -33,7 +33,7 @@ export function Button({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; loading?: boolean }) {
   const styles: Record<Variant, string> = {
-    primary: "accent-gradient font-semibold shadow-[0_8px_30px_-8px_rgb(214_255_61/0.55)] hover:brightness-110 hover:shadow-[0_8px_40px_-6px_rgb(214_255_61/0.7)]",
+    primary: "accent-gradient font-semibold shadow-[0_8px_30px_-8px_rgb(46_230_197/0.55)] hover:brightness-110 hover:shadow-[0_8px_40px_-6px_rgb(46_230_197/0.7)]",
     secondary: "bg-white/[0.05] border border-white/10 text-ink hover:bg-white/[0.09] hover:border-white/20",
     ghost: "text-mute hover:text-ink hover:bg-white/[0.06]",
     danger: "bg-bad/10 border border-bad/30 text-bad hover:bg-bad/20",

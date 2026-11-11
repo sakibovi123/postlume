@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #070708;
-  --color-panel: #0f0f12;
-  --color-panel-2: #17171b;
-  --color-line: #24242a;
+  --color-bg: #06090b;
+  --color-panel: #0d1215;
+  --color-panel-2: #141b1f;
+  --color-line: #1f292e;
   --color-ink: #f5f5f4;
-  --color-mute: #8a8a94;
-  --color-accent: #d6ff3d;
-  --color-accent-2: #7cff6b;
-  --color-hot: #ff4f8b;
+  --color-mute: #84939a;
+  --color-accent: #2ee6c5;
+  --color-accent-2: #38b6ff;
+  --color-hot: #ff7a59;
   --color-ok: #4ade80;
   --color-warn: #fbbf24;
   --color-bad: #f87171;
@@ -75,12 +75,12 @@ body {
 }
 
 .accent-gradient {
-  background-image: linear-gradient(120deg, #eaff7a, var(--color-accent) 45%, var(--color-accent-2));
-  color: #0a0a0a;
+  background-image: linear-gradient(120deg, #9ff5e4, var(--color-accent) 45%, var(--color-accent-2));
+  color: #03201b;
 }
 
 .text-gradient {
-  background-image: linear-gradient(100deg, #f4ffb8, var(--color-accent) 40%, var(--color-accent-2));
+  background-image: linear-gradient(100deg, #9ff5e4, var(--color-accent) 40%, var(--color-accent-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -108,13 +108,13 @@ body {
 }
 
 .glow {
-  box-shadow: 0 0 0 1px rgb(214 255 61 / 0.35), 0 0 40px -6px rgb(214 255 61 / 0.45);
+  box-shadow: 0 0 0 1px rgb(46 230 197 / 0.35), 0 0 40px -6px rgb(46 230 197 / 0.45);
 }
 
 .bg-aurora {
   background:
-    radial-gradient(60% 50% at 15% 0%, rgb(214 255 61 / 0.09), transparent 70%),
-    radial-gradient(50% 40% at 90% 10%, rgb(255 79 139 / 0.07), transparent 70%),
+    radial-gradient(60% 50% at 15% 0%, rgb(46 230 197 / 0.09), transparent 70%),
+    radial-gradient(50% 40% at 90% 10%, rgb(255 122 89 / 0.07), transparent 70%),
     var(--color-bg);
 }
 

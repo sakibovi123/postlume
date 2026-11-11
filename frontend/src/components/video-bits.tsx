@@ -31,7 +31,7 @@ export const PRESET_LOOK: Record<StylePreset, { gradient: string; emoji: string;
   storybook: { gradient: "from-emerald-300 via-lime-200 to-amber-300", emoji: "📖", blurb: "Watercolor, gentle and warm" },
   comic: { gradient: "from-red-500 via-orange-500 to-yellow-300", emoji: "💥", blurb: "Inked panels, halftone shading" },
   documentary: { gradient: "from-stone-500 via-zinc-700 to-slate-900", emoji: "🎞️", blurb: "Realistic, natural light" },
-  custom: { gradient: "from-lime-300 via-emerald-500 to-cyan-600", emoji: "✨", blurb: "Describe your own style" },
+  custom: { gradient: "from-teal-300 via-cyan-400 to-sky-500", emoji: "✨", blurb: "Describe your own style" },
 };
 
 export const STEPS: { id: VideoStatus; label: string; detail: string; icon: LucideIcon }[] = [

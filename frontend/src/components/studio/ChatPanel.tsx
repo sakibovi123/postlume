@@ -154,7 +154,7 @@ export function ChatPanel({
       <div className="flex items-center gap-2.5 border-b border-white/[0.06] px-5 py-4">
         <Avatar />
         <div>
-          <p className="text-sm font-semibold">Assistant</p>
+          <p className="text-sm font-semibold">Lumen</p>
           <p className="flex items-center gap-1.5 text-xs text-mute">
             <span className={cx("size-1.5 rounded-full", busy ? "animate-pulse bg-accent" : "bg-ok")} />
             {busy ? "Working…" : "Writes, produces and edits your videos"} · {styles.providers.llm}
@@ -166,7 +166,7 @@ export function ChatPanel({
         {messages.length === 0 && !task && (
           <div className="space-y-3 pt-2">
             <Bubble>
-              Hi! I&apos;m your content creator. Tell me what you want to make, like a horror series, a kids story or a
+              Hi! I&apos;m Lumen, your content creator. Tell me what you want to make, like a horror series, a kids story or a
               motivational short. I&apos;ll write every episode, make the videos and edit them for you.
             </Bubble>
             {can("creator") && (

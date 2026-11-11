@@ -70,14 +70,14 @@ export default function AssistantHome() {
       )}
 
       <div className="animate-fade-up pt-4 text-center">
-        <span className="accent-gradient mx-auto grid size-12 place-items-center rounded-2xl shadow-[0_8px_30px_-8px_rgb(214_255_61/0.6)]">
+        <span className="accent-gradient mx-auto grid size-12 place-items-center rounded-2xl shadow-[0_8px_30px_-8px_rgb(46_230_197/0.6)]">
           <Bot className="size-6" />
         </span>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight md:text-5xl">
-          Your AI <span className="text-gradient">content creator</span>
+          Meet <span className="text-gradient">Lumen</span>
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-mute">
-          Tell it what you want. It writes every episode, makes the videos and edits them when you ask, all in one chat.
+          Your AI content creator. Tell Lumen what you want and it writes every episode, makes the videos and edits them when you ask, all in one chat.
         </p>
       </div>
 
@@ -102,7 +102,7 @@ export default function AssistantHome() {
                     start();
                   }
                 }}
-                placeholder="Hey assistant, I need a horror story…"
+                placeholder="Hey Lumen, I need a horror story…"
                 className="min-h-20 flex-1 resize-none bg-transparent pt-1 text-base text-ink outline-none placeholder:text-mute/60 md:text-lg"
               />
               <button

@@ -96,7 +96,7 @@ export function Composer({ styles, showStyles = true }: { styles: StylesInfo; sh
             </span>
             <button
               disabled={!text.trim() || busy}
-              className="accent-gradient ml-auto flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold shadow-[0_8px_30px_-8px_rgb(214_255_61/0.6)] transition hover:brightness-110 disabled:opacity-40 md:ml-0"
+              className="accent-gradient ml-auto flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold shadow-[0_8px_30px_-8px_rgb(46_230_197/0.6)] transition hover:brightness-110 disabled:opacity-40 md:ml-0"
             >
               Generate <ArrowUp className="size-4" strokeWidth={2.5} />
             </button>

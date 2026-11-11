@@ -17,8 +17,8 @@ const ROLES: Record<Role, { label: string; help: string; icon: typeof Crown; ton
 const ASSIGNABLE: Role[] = ["admin", "creator", "viewer"];
 
 const AVATAR_GRADIENTS = [
-  "from-[#eaff7a] to-[#7cff6b]",
-  "from-[#ff8a65] to-[#ff4f8b]",
+  "from-[#9ff5e4] to-[#38b6ff]",
+  "from-[#ffb199] to-[#ff7a59]",
   "from-[#7dd3fc] to-[#a78bfa]",
   "from-[#fcd34d] to-[#fb923c]",
   "from-[#86efac] to-[#22d3ee]",
